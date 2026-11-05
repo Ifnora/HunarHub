@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import dotenv from "dotenv";
+import { pool } from "./database";
 
 dotenv.config();
 
@@ -26,8 +27,31 @@ app.get("/health", (_req, res) => {
   });
 });
 
+app.get("/health/database", async (_req, res) => {
+  try {
+    await pool.query("SELECT 1");
+    res.status(200).json({
+      success: true,
+      database: "connected"
+    });
+  } catch (error) {
+    console.error("Database health check failed:", error);
+    res.status(503).json({
+      success: false,
+      database: "unavailable"
+    });
+  }
+});
+
 const PORT = Number(process.env.PORT) || 3000;
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`HunarHub API running on port ${PORT}`);
+});
+
+process.on("SIGTERM", () => {
+  server.close(async () => {
+    await pool.end();
+    process.exit(0);
+  });
 });
