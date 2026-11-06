@@ -5,6 +5,7 @@ import helmet from "helmet";
 import dotenv from "dotenv";
 import { pool } from "./database";
 import authRouter from "./auth";
+import profileRouter from "./routes/profile";
 
 dotenv.config();
 
@@ -16,6 +17,9 @@ app.use(express.json({ limit: "1mb" }));
 
 // AUTHENTICATION ROUTES
 app.use("/auth", authRouter);
+
+// USER PROFILE ROUTES
+app.use("/profile", profileRouter);
 
 // HOME
 app.get("/", (_req, res) => {
