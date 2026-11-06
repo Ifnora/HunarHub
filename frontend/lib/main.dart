@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'api_service.dart';
 import 'login_screen.dart';
@@ -34,6 +35,13 @@ class AppHome extends StatefulWidget {
 
 class _AppHomeState extends State<AppHome> {
   String? _token;
+  String? _selectedFeature;
+
+  void _openFeature(String feature) {
+    setState(() {
+      _selectedFeature = feature;
+    });
+  }
 
   void _handleLogin(String token) {
     setState(() {
@@ -41,33 +49,305 @@ class _AppHomeState extends State<AppHome> {
     });
   }
 
+  void _goHome() {
+    setState(() {
+      _selectedFeature = null;
+    });
+  }
+
   void _logout() {
     setState(() {
       _token = null;
+      _selectedFeature = null;
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    // Public home screen appears first.
+    if (_selectedFeature == null) {
+      return HomeScreen(onSelect: _openFeature);
+    }
+
+    // Login is required before accessing a feature.
     if (_token == null) {
       return LoginScreen(onLogin: _handleLogin);
     }
 
-    return CVBuilderScreen(
-      apiService: ApiService(token: _token!),
+    final api = ApiService(token: _token!);
+
+    if (_selectedFeature == 'cv') {
+      return CVBuilderScreen(
+        apiService: api,
+        onLogout: _logout,
+        onHome: _goHome,
+      );
+    }
+
+    return FeatureScreen(
+      feature: _selectedFeature!,
+      onHome: _goHome,
       onLogout: _logout,
     );
   }
 }
 
+// PUBLIC HOME SCREEN
+
+class HomeScreen extends StatelessWidget {
+  final ValueChanged<String> onSelect;
+
+  const HomeScreen({
+    super.key,
+    required this.onSelect,
+  });
+
+  Widget featureCard({
+    required IconData icon,
+    required String title,
+    required String description,
+    required String feature,
+  }) {
+    return Card(
+      elevation: 2,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => onSelect(feature),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                icon,
+                size: 38,
+                color: const Color(0xFF087E65),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 7),
+              Text(
+                description,
+                style: const TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Explore →',
+                style: TextStyle(
+                  color: Color(0xFF087E65),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('HunarHub Pakistan'),
+        centerTitle: true,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 15),
+            const Center(
+              child: Icon(
+                Icons.school,
+                size: 65,
+                color: Color(0xFF087E65),
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Center(
+              child: Text(
+                'Your Career. Your Future.',
+                style: TextStyle(
+                  fontSize: 23,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Center(
+              child: Text(
+                'Find jobs, build your CV and prepare for success.',
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: 28),
+            const Text(
+              'Explore HunarHub',
+              style: TextStyle(
+                fontSize: 21,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 0.88,
+              children: [
+                featureCard(
+                  icon: Icons.work_outline,
+                  title: 'Jobs & Internships',
+                  description: 'Explore career opportunities in Pakistan.',
+                  feature: 'jobs',
+                ),
+                featureCard(
+                  icon: Icons.description_outlined,
+                  title: 'CV Builder',
+                  description: 'Create your professional CV.',
+                  feature: 'cv',
+                ),
+                featureCard(
+                  icon: Icons.quiz_outlined,
+                  title: 'Interview & Test Preparation',
+                  description: 'Prepare for interviews and career tests.',
+                  feature: 'preparation',
+                ),
+                featureCard(
+                  icon: Icons.person_outline,
+                  title: 'Profile & Applications',
+                  description: 'Manage your profile and applications.',
+                  feature: 'profile',
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            const Center(
+              child: Text(
+                'HunarHub Pakistan',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// OTHER FEATURE SCREENS
+
+class FeatureScreen extends StatelessWidget {
+  final String feature;
+  final VoidCallback onHome;
+  final VoidCallback onLogout;
+
+  const FeatureScreen({
+    super.key,
+    required this.feature,
+    required this.onHome,
+    required this.onLogout,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final details = {
+      'jobs': (
+        'Jobs & Internships',
+        'Explore job opportunities across Pakistan.'
+      ),
+      'preparation': (
+        'Interview & Test Preparation',
+        'Prepare for interviews and professional tests.'
+      ),
+      'profile': (
+        'Profile & Applications',
+        'Manage your personal profile and job applications.'
+      ),
+    };
+
+    final item = details[feature]!;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('HunarHub Pakistan'),
+        leading: IconButton(
+          onPressed: onHome,
+          icon: const Icon(Icons.home),
+        ),
+        actions: [
+          IconButton(
+            onPressed: onLogout,
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
+          ),
+        ],
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.construction,
+                size: 60,
+                color: Color(0xFF087E65),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                item.$1,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 23,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                item.$2,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 18),
+              const Text(
+                'This section is under development.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              FilledButton(
+                onPressed: onHome,
+                child: const Text('Back to Home'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// CV BUILDER
+
 class CVBuilderScreen extends StatefulWidget {
   final ApiService apiService;
   final VoidCallback onLogout;
+  final VoidCallback onHome;
 
   const CVBuilderScreen({
     super.key,
     required this.apiService,
     required this.onLogout,
+    required this.onHome,
   });
 
   @override
@@ -172,7 +452,10 @@ class _CVBuilderScreenState extends State<CVBuilderScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('HunarHub Pakistan'),
-        centerTitle: true,
+        leading: IconButton(
+          onPressed: widget.onHome,
+          icon: const Icon(Icons.home),
+        ),
         actions: [
           IconButton(
             onPressed: widget.onLogout,
@@ -200,13 +483,8 @@ class _CVBuilderScreenState extends State<CVBuilderScreen> {
                 'Create your professional CV for job applications.',
               ),
               const SizedBox(height: 24),
-              const Text(
-                'Select CV Category',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 10),
               DropdownButtonFormField<String>(
-                value: _cvType,
+                initialValue: _cvType,
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),
                   labelText: 'CV Type',
