@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import { pool } from "./database";
 import authRouter from "./auth";
 import profileRouter from "./routes/profile";
+import cvRouter from "./routes/cv";
 
 dotenv.config();
 
@@ -20,6 +21,9 @@ app.use("/auth", authRouter);
 
 // USER PROFILE ROUTES
 app.use("/profile", profileRouter);
+
+// CV BUILDER ROUTES
+app.use("/cv", cvRouter);
 
 // HOME
 app.get("/", (_req, res) => {
