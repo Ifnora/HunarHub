@@ -30,6 +30,28 @@ jobs:
         working-directory: frontend
         run: flutter create --platforms=android --project-name hunarhub .
 
+      - name: Add Android Internet permission
+        working-directory: frontend
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("android/app/src/main/AndroidManifest.xml")
+          content = path.read_text()
+
+          permission = '    <uses-permission android:name="android.permission.INTERNET" />'
+
+          if "android.permission.INTERNET" not in content:
+              position = content.find(">", content.find("<manifest"))
+              if position == -1:
+                  raise SystemExit("Android manifest is invalid")
+
+              content = content[:position + 1] + "\n" + permission + content[position + 1:]
+              path.write_text(content)
+
+          print("Android Internet permission verified.")
+          PY
+
       - name: Install dependencies
         working-directory: frontend
         run: flutter pub get
