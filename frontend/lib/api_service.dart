@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
@@ -33,7 +32,7 @@ class ApiService {
         'Authorization': 'Bearer $token',
       };
 
-  // GET JOBS WITH PAGINATION
+  // GET JOBS
   Future<Map<String, dynamic>> getJobs({
     int page = 1,
     int limit = 10,
@@ -45,13 +44,10 @@ class ApiService {
       },
     );
 
-    final response = await http.get(
-      uri,
-      headers: _headers,
-    );
-
+    final response = await http.get(uri, headers: _headers);
     return _handleResponse(response);
   }
+
   // GET USER PROFILE
   Future<Map<String, dynamic>> getProfile() async {
     final response = await http.get(
@@ -84,6 +80,7 @@ class ApiService {
 
     return _handleResponse(response);
   }
+
   // CREATE CV
   Future<Map<String, dynamic>> createCV({
     required String title,
@@ -141,6 +138,56 @@ class ApiService {
   Future<Map<String, dynamic>> deleteCV(String id) async {
     final response = await http.delete(
       Uri.parse('$baseUrl/cv/$id'),
+      headers: _headers,
+    );
+
+    return _handleResponse(response);
+  }
+
+  // GET SAVED JOBS
+  Future<Map<String, dynamic>> getSavedJobs() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/applications/saved'),
+      headers: _headers,
+    );
+
+    return _handleResponse(response);
+  }
+
+  // SAVE JOB
+  Future<Map<String, dynamic>> saveJob(String jobId) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/applications/saved/$jobId'),
+      headers: _headers,
+    );
+
+    return _handleResponse(response);
+  }
+
+  // REMOVE SAVED JOB
+  Future<Map<String, dynamic>> removeSavedJob(String jobId) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/applications/saved/$jobId'),
+      headers: _headers,
+    );
+
+    return _handleResponse(response);
+  }
+
+  // RECORD JOB APPLICATION
+  Future<Map<String, dynamic>> applyForJob(String jobId) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/applications/$jobId/apply'),
+      headers: _headers,
+    );
+
+    return _handleResponse(response);
+  }
+
+  // GET APPLICATION TRACKING
+  Future<Map<String, dynamic>> getApplications() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/applications'),
       headers: _headers,
     );
 
