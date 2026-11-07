@@ -17,26 +17,14 @@ class ApiService {
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/auth/login'),
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: {'Content-Type': 'application/json'},
       body: jsonEncode({
         'email': email,
         'password': password,
       }),
     );
 
-    final data = jsonDecode(response.body);
-
-    if (response.statusCode == 200 &&
-        data is Map &&
-        data['success'] == true) {
-      return Map<String, dynamic>.from(data);
-    }
-
-    throw Exception(
-      data is Map ? data['message'] ?? 'Login failed' : 'Login failed',
-    );
+    return _handleResponse(response);
   }
 
   // AUTHENTICATION HEADERS
@@ -44,6 +32,26 @@ class ApiService {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
       };
+
+  // GET JOBS WITH PAGINATION
+  Future<Map<String, dynamic>> getJobs({
+    int page = 1,
+    int limit = 10,
+  }) async {
+    final uri = Uri.parse('$baseUrl/jobs').replace(
+      queryParameters: {
+        'page': page.toString(),
+        'limit': limit.toString(),
+      },
+    );
+
+    final response = await http.get(
+      uri,
+      headers: _headers,
+    );
+
+    return _handleResponse(response);
+  }
 
   // CREATE CV
   Future<Map<String, dynamic>> createCV({
@@ -109,8 +117,16 @@ class ApiService {
   }
 
   // HANDLE API RESPONSES
-  Map<String, dynamic> _handleResponse(http.Response response) {
-    final dynamic data = jsonDecode(response.body);
+  static Map<String, dynamic> _handleResponse(
+    http.Response response,
+  ) {
+    dynamic data;
+
+    try {
+      data = jsonDecode(response.body);
+    } catch (_) {
+      throw Exception('Invalid server response.');
+    }
 
     if (response.statusCode >= 200 &&
         response.statusCode < 300 &&
@@ -120,7 +136,7 @@ class ApiService {
 
     throw Exception(
       data is Map
-          ? data['message'] ?? 'API request failed'
+          ? data['message']?.toString() ?? 'API request failed'
           : 'API request failed',
     );
   }
