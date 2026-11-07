@@ -7,7 +7,7 @@ import { pool } from "./database";
 import authRouter from "./auth";
 import profileRouter from "./routes/profile";
 import cvRouter from "./routes/cv";
-
+import applicationsRouter from "./routes/applications";
 dotenv.config();
 
 const app = express();
@@ -24,7 +24,8 @@ app.use("/profile", profileRouter);
 
 // CV BUILDER ROUTES
 app.use("/cv", cvRouter);
-
+// SAVED JOBS AND APPLICATION TRACKING ROUTES
+app.use("/applications", applicationsRouter);
 // HOME
 app.get("/", (_req, res) => {
   res.status(200).json({
