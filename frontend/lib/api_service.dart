@@ -52,7 +52,38 @@ class ApiService {
 
     return _handleResponse(response);
   }
+  // GET USER PROFILE
+  Future<Map<String, dynamic>> getProfile() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/profile'),
+      headers: _headers,
+    );
 
+    return _handleResponse(response);
+  }
+
+  // UPDATE USER PROFILE
+  Future<Map<String, dynamic>> updateProfile({
+    String? city,
+    String? country,
+    List<dynamic>? education,
+    List<dynamic>? skills,
+    List<dynamic>? experience,
+  }) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/profile'),
+      headers: _headers,
+      body: jsonEncode({
+        if (city != null) 'city': city,
+        if (country != null) 'country': country,
+        if (education != null) 'education': education,
+        if (skills != null) 'skills': skills,
+        if (experience != null) 'experience': experience,
+      }),
+    );
+
+    return _handleResponse(response);
+  }
   // CREATE CV
   Future<Map<String, dynamic>> createCV({
     required String title,
