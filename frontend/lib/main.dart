@@ -38,21 +38,15 @@ class _AppHomeState extends State<AppHome> {
   String? _selectedFeature;
 
   void _openFeature(String feature) {
-    setState(() {
-      _selectedFeature = feature;
-    });
+    setState(() => _selectedFeature = feature);
   }
 
   void _handleLogin(String token) {
-    setState(() {
-      _token = token;
-    });
+    setState(() => _token = token);
   }
 
   void _goHome() {
-    setState(() {
-      _selectedFeature = null;
-    });
+    setState(() => _selectedFeature = null);
   }
 
   void _logout() {
@@ -64,12 +58,10 @@ class _AppHomeState extends State<AppHome> {
 
   @override
   Widget build(BuildContext context) {
-    // Public home screen appears first.
     if (_selectedFeature == null) {
       return HomeScreen(onSelect: _openFeature);
     }
 
-    // Login is required before accessing a feature.
     if (_token == null) {
       return LoginScreen(onLogin: _handleLogin);
     }
@@ -78,6 +70,14 @@ class _AppHomeState extends State<AppHome> {
 
     if (_selectedFeature == 'cv') {
       return CVBuilderScreen(
+        apiService: api,
+        onLogout: _logout,
+        onHome: _goHome,
+      );
+    }
+
+    if (_selectedFeature == 'jobs') {
+      return JobsScreen(
         apiService: api,
         onLogout: _logout,
         onHome: _goHome,
@@ -245,6 +245,209 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
+// JOBS SCREEN CONNECTED TO API
+
+class JobsScreen extends StatefulWidget {
+  final ApiService apiService;
+  final VoidCallback onHome;
+  final VoidCallback onLogout;
+
+  const JobsScreen({
+    super.key,
+    required this.apiService,
+    required this.onHome,
+    required this.onLogout,
+  });
+
+  @override
+  State<JobsScreen> createState() => _JobsScreenState();
+}
+
+class _JobsScreenState extends State<JobsScreen> {
+  bool _loading = true;
+  String? _error;
+  List<dynamic> _jobs = [];
+
+  @override
+  void initState() {
+    super.initState();
+    loadJobs();
+  }
+
+  Future<void> loadJobs() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final result = await widget.apiService.getJobs();
+
+      final dynamic jobsData = result['jobs'];
+
+      if (!mounted) return;
+
+      setState(() {
+        _jobs = jobsData is List ? jobsData : [];
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _error = error.toString().replaceFirst('Exception: ', '');
+        _loading = false;
+      });
+    }
+  }
+
+  String jobValue(Map job, String key) {
+    return job[key]?.toString() ?? '';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Jobs & Internships'),
+        leading: IconButton(
+          onPressed: widget.onHome,
+          icon: const Icon(Icons.home),
+        ),
+        actions: [
+          IconButton(
+            onPressed: widget.onLogout,
+            icon: const Icon(Icons.logout),
+          ),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.cloud_off,
+                          size: 55,
+                          color: Colors.grey,
+                        ),
+                        const SizedBox(height: 15),
+                        Text(
+                          _error!,
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 18),
+                        FilledButton(
+                          onPressed: loadJobs,
+                          child: const Text('Try Again'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : _jobs.isEmpty
+                  ? RefreshIndicator(
+                      onRefresh: loadJobs,
+                      child: ListView(
+                        physics:
+                            const AlwaysScrollableScrollPhysics(),
+                        children: const [
+                          SizedBox(height: 130),
+                          Icon(
+                            Icons.work_outline,
+                            size: 75,
+                            color: Color(0xFF087E65),
+                          ),
+                          SizedBox(height: 20),
+                          Center(
+                            child: Text(
+                              'No Jobs Published Yet',
+                              style: TextStyle(
+                                fontSize: 21,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          SizedBox(height: 10),
+                          Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 30,
+                            ),
+                            child: Text(
+                              'New jobs and internships will appear here. '
+                              'Please check again later.',
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: loadJobs,
+                      child: ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _jobs.length,
+                        itemBuilder: (context, index) {
+                          final dynamic item = _jobs[index];
+
+                          if (item is! Map) {
+                            return const SizedBox.shrink();
+                          }
+
+                          final job = item;
+
+                          final title = jobValue(job, 'title');
+                          final company =
+                              jobValue(job, 'company_name');
+                          final location =
+                              jobValue(job, 'location');
+                          final jobType =
+                              jobValue(job, 'employment_type');
+
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 14),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    title.isEmpty
+                                        ? 'Job Opportunity'
+                                        : title,
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  if (company.isNotEmpty) ...[
+                                    const SizedBox(height: 8),
+                                    Text('Company: $company'),
+                                  ],
+                                  if (location.isNotEmpty) ...[
+                                    const SizedBox(height: 5),
+                                    Text('Location: $location'),
+                                  ],
+                                  if (jobType.isNotEmpty) ...[
+                                    const SizedBox(height: 5),
+                                    Text('Type: $jobType'),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+    );
+  }
+}
+
 // OTHER FEATURE SCREENS
 
 class FeatureScreen extends StatelessWidget {
@@ -262,10 +465,6 @@ class FeatureScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final details = {
-      'jobs': (
-        'Jobs & Internships',
-        'Explore job opportunities across Pakistan.'
-      ),
       'preparation': (
         'Interview & Test Preparation',
         'Prepare for interviews and professional tests.'
@@ -289,7 +488,6 @@ class FeatureScreen extends StatelessWidget {
           IconButton(
             onPressed: onLogout,
             icon: const Icon(Icons.logout),
-            tooltip: 'Logout',
           ),
         ],
       ),
