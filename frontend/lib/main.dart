@@ -68,35 +68,53 @@ class _AppHomeState extends State<AppHome> {
 
     final api = ApiService(token: _token!);
 
-    if (_selectedFeature == 'cv') {
-      return CVBuilderScreen(
-        apiService: api,
-        onLogout: _logout,
-        onHome: _goHome,
-      );
-    }
+    switch (_selectedFeature) {
+      case 'cv':
+        return CVBuilderScreen(
+          apiService: api,
+          onLogout: _logout,
+          onHome: _goHome,
+        );
 
-    if (_selectedFeature == 'jobs') {
-      return JobsScreen(
-        apiService: api,
-        onLogout: _logout,
-        onHome: _goHome,
-      );
-    }
+      case 'jobs':
+        return JobsScreen(
+          apiService: api,
+          onLogout: _logout,
+          onHome: _goHome,
+          onSavedJobs: () => _openFeature('saved'),
+          onApplications: () => _openFeature('applications'),
+        );
 
-    if (_selectedFeature == 'profile') {
-      return ProfileScreen(
-        apiService: api,
-        onLogout: _logout,
-        onHome: _goHome,
-      );
-    }
+      case 'profile':
+        return ProfileScreen(
+          apiService: api,
+          onLogout: _logout,
+          onHome: _goHome,
+          onApplications: () => _openFeature('applications'),
+        );
 
-    return FeatureScreen(
-      feature: _selectedFeature!,
-      onHome: _goHome,
-      onLogout: _logout,
-    );
+      case 'saved':
+        return SavedJobsScreen(
+          apiService: api,
+          onLogout: _logout,
+          onHome: _goHome,
+          onJobs: () => _openFeature('jobs'),
+        );
+
+      case 'applications':
+        return ApplicationsScreen(
+          apiService: api,
+          onLogout: _logout,
+          onHome: _goHome,
+          onJobs: () => _openFeature('jobs'),
+        );
+
+      default:
+        return FeatureScreen(
+          onHome: _goHome,
+          onLogout: _logout,
+        );
+    }
   }
 }
 
@@ -259,12 +277,16 @@ class JobsScreen extends StatefulWidget {
   final ApiService apiService;
   final VoidCallback onHome;
   final VoidCallback onLogout;
+  final VoidCallback onSavedJobs;
+  final VoidCallback onApplications;
 
   const JobsScreen({
     super.key,
     required this.apiService,
     required this.onHome,
     required this.onLogout,
+    required this.onSavedJobs,
+    required this.onApplications,
   });
 
   @override
@@ -275,6 +297,8 @@ class _JobsScreenState extends State<JobsScreen> {
   bool _loading = true;
   String? _error;
   List<dynamic> _jobs = [];
+  final Set<String> _savingIds = {};
+  final Set<String> _applyingIds = {};
 
   @override
   void initState() {
@@ -300,7 +324,6 @@ class _JobsScreenState extends State<JobsScreen> {
       });
     } catch (error) {
       if (!mounted) return;
-
       setState(() {
         _error = error.toString().replaceFirst('Exception: ', '');
         _loading = false;
@@ -310,6 +333,157 @@ class _JobsScreenState extends State<JobsScreen> {
 
   String jobValue(Map job, String key) {
     return job[key]?.toString() ?? '';
+  }
+
+  void showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  Future<void> saveJob(String jobId) async {
+    if (_savingIds.contains(jobId)) return;
+
+    setState(() => _savingIds.add(jobId));
+
+    try {
+      final result = await widget.apiService.saveJob(jobId);
+      if (!mounted) return;
+      showMessage(
+        result['message']?.toString() ?? 'Job saved successfully.',
+      );
+    } catch (error) {
+      if (!mounted) return;
+      showMessage(error.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) {
+        setState(() => _savingIds.remove(jobId));
+      }
+    }
+  }
+
+  Future<void> applyForJob(String jobId) async {
+    if (_applyingIds.contains(jobId)) return;
+
+    setState(() => _applyingIds.add(jobId));
+
+    try {
+      final result = await widget.apiService.applyForJob(jobId);
+      if (!mounted) return;
+
+      showMessage(
+        result['message']?.toString() ??
+            'Application recorded successfully.',
+      );
+    } catch (error) {
+      if (!mounted) return;
+      showMessage(error.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) {
+        setState(() => _applyingIds.remove(jobId));
+      }
+    }
+  }
+
+  Widget jobCard(Map job) {
+    final id = jobValue(job, 'id');
+    final title = jobValue(job, 'title');
+    final employer = jobValue(job, 'employer');
+    final location = jobValue(job, 'location');
+    final country = jobValue(job, 'country');
+    final qualification = jobValue(job, 'qualification');
+    final experience = jobValue(job, 'experience');
+    final salary = jobValue(job, 'salary_information');
+    final deadline = jobValue(job, 'deadline');
+    final applyUrl = jobValue(job, 'official_apply_url');
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 14),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title.isEmpty ? 'Job Opportunity' : title,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            if (employer.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text('Employer: $employer'),
+            ],
+            if (location.isNotEmpty || country.isNotEmpty) ...[
+              const SizedBox(height: 5),
+              Text('Location: ${[location, country].where((v) => v.isNotEmpty).join(', ')}'),
+            ],
+            if (qualification.isNotEmpty) ...[
+              const SizedBox(height: 5),
+              Text('Qualification: $qualification'),
+            ],
+            if (experience.isNotEmpty) ...[
+              const SizedBox(height: 5),
+              Text('Experience: $experience'),
+            ],
+            if (salary.isNotEmpty) ...[
+              const SizedBox(height: 5),
+              Text('Salary: $salary'),
+            ],
+            if (deadline.isNotEmpty) ...[
+              const SizedBox(height: 5),
+              Text('Deadline: $deadline'),
+            ],
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: id.isEmpty || _savingIds.contains(id)
+                      ? null
+                      : () => saveJob(id),
+                  icon: const Icon(Icons.bookmark_add_outlined),
+                  label: Text(
+                    _savingIds.contains(id) ? 'Saving...' : 'Save Job',
+                  ),
+                ),
+                FilledButton.icon(
+                  onPressed: id.isEmpty || _applyingIds.contains(id)
+                      ? null
+                      : () => applyForJob(id),
+                  icon: const Icon(Icons.assignment_turned_in_outlined),
+                  label: Text(
+                    _applyingIds.contains(id) ? 'Recording...' : 'Apply & Track',
+                  ),
+                ),
+              ],
+            ),
+            if (applyUrl.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              const Text(
+                'Official application website:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              SelectableText(
+                applyUrl,
+                style: const TextStyle(
+                  color: Color(0xFF087E65),
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Open this official link in your browser to apply with the employer.',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -323,8 +497,19 @@ class _JobsScreenState extends State<JobsScreen> {
         ),
         actions: [
           IconButton(
+            onPressed: widget.onSavedJobs,
+            icon: const Icon(Icons.bookmarks_outlined),
+            tooltip: 'Saved Jobs',
+          ),
+          IconButton(
+            onPressed: widget.onApplications,
+            icon: const Icon(Icons.assignment_outlined),
+            tooltip: 'My Applications',
+          ),
+          IconButton(
             onPressed: widget.onLogout,
             icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
           ),
         ],
       ),
@@ -389,48 +574,491 @@ class _JobsScreenState extends State<JobsScreen> {
                         padding: const EdgeInsets.all(16),
                         itemCount: _jobs.length,
                         itemBuilder: (context, index) {
-                          final dynamic item = _jobs[index];
-
+                          final item = _jobs[index];
                           if (item is! Map) {
                             return const SizedBox.shrink();
                           }
+                          return jobCard(item);
+                        },
+                      ),
+                    ),
+    );
+  }
+}
 
-                          final job = item;
-                          final title = jobValue(job, 'title');
-                          final company = jobValue(job, 'company_name');
-                          final location = jobValue(job, 'location');
-                          final jobType = jobValue(job, 'employment_type');
+// SAVED JOBS SCREEN
 
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 14),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    title.isEmpty ? 'Job Opportunity' : title,
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  if (company.isNotEmpty) ...[
-                                    const SizedBox(height: 8),
-                                    Text('Company: $company'),
-                                  ],
-                                  if (location.isNotEmpty) ...[
-                                    const SizedBox(height: 5),
-                                    Text('Location: $location'),
-                                  ],
-                                  if (jobType.isNotEmpty) ...[
-                                    const SizedBox(height: 5),
-                                    Text('Type: $jobType'),
-                                  ],
-                                ],
+class SavedJobsScreen extends StatefulWidget {
+  final ApiService apiService;
+  final VoidCallback onHome;
+  final VoidCallback onLogout;
+  final VoidCallback onJobs;
+
+  const SavedJobsScreen({
+    super.key,
+    required this.apiService,
+    required this.onHome,
+    required this.onLogout,
+    required this.onJobs,
+  });
+
+  @override
+  State<SavedJobsScreen> createState() => _SavedJobsScreenState();
+}
+
+class _SavedJobsScreenState extends State<SavedJobsScreen> {
+  bool _loading = true;
+  String? _error;
+  List<dynamic> _jobs = [];
+  final Set<String> _removingIds = {};
+
+  @override
+  void initState() {
+    super.initState();
+    loadSavedJobs();
+  }
+
+  Future<void> loadSavedJobs() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final result = await widget.apiService.getSavedJobs();
+      final data = result['jobs'];
+
+      if (!mounted) return;
+      setState(() {
+        _jobs = data is List ? data : [];
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error.toString().replaceFirst('Exception: ', '');
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> removeJob(String id) async {
+    if (_removingIds.contains(id)) return;
+
+    setState(() => _removingIds.add(id));
+
+    try {
+      final result = await widget.apiService.removeSavedJob(id);
+      if (!mounted) return;
+
+      setState(() {
+        _jobs.removeWhere(
+          (item) => item is Map && item['id'].toString() == id,
+        );
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result['message']?.toString() ?? 'Saved job removed.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _removingIds.remove(id));
+      }
+    }
+  }
+
+  Widget savedJobCard(Map job) {
+    final id = job['id']?.toString() ?? '';
+    final title = job['title']?.toString() ?? 'Job Opportunity';
+    final employer = job['employer']?.toString() ?? '';
+    final location = job['location']?.toString() ?? '';
+    final country = job['country']?.toString() ?? '';
+    final applyUrl = job['official_apply_url']?.toString() ?? '';
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            if (employer.isNotEmpty) ...[
+              const SizedBox(height: 7),
+              Text('Employer: $employer'),
+            ],
+            if (location.isNotEmpty || country.isNotEmpty) ...[
+              const SizedBox(height: 5),
+              Text('Location: ${[location, country].where((v) => v.isNotEmpty).join(', ')}'),
+            ],
+            if (applyUrl.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              SelectableText(
+                applyUrl,
+                style: const TextStyle(
+                  color: Color(0xFF087E65),
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: id.isEmpty || _removingIds.contains(id)
+                  ? null
+                  : () => removeJob(id),
+              icon: const Icon(Icons.delete_outline),
+              label: Text(
+                _removingIds.contains(id) ? 'Removing...' : 'Remove Saved Job',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Saved Jobs'),
+        leading: IconButton(
+          onPressed: widget.onHome,
+          icon: const Icon(Icons.home),
+        ),
+        actions: [
+          IconButton(
+            onPressed: widget.onJobs,
+            icon: const Icon(Icons.work_outline),
+            tooltip: 'Browse Jobs',
+          ),
+          IconButton(
+            onPressed: widget.onLogout,
+            icon: const Icon(Icons.logout),
+          ),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(_error!, textAlign: TextAlign.center),
+                        const SizedBox(height: 16),
+                        FilledButton(
+                          onPressed: loadSavedJobs,
+                          child: const Text('Try Again'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : _jobs.isEmpty
+                  ? RefreshIndicator(
+                      onRefresh: loadSavedJobs,
+                      child: ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        children: const [
+                          SizedBox(height: 130),
+                          Icon(
+                            Icons.bookmark_border,
+                            size: 70,
+                            color: Color(0xFF087E65),
+                          ),
+                          SizedBox(height: 18),
+                          Center(
+                            child: Text(
+                              'No Saved Jobs Yet',
+                              style: TextStyle(
+                                fontSize: 21,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
-                          );
+                          ),
+                          SizedBox(height: 8),
+                          Center(
+                            child: Text(
+                              'Save interesting jobs to find them here.',
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: loadSavedJobs,
+                      child: ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _jobs.length,
+                        itemBuilder: (context, index) {
+                          final item = _jobs[index];
+                          if (item is! Map) {
+                            return const SizedBox.shrink();
+                          }
+                          return savedJobCard(item);
+                        },
+                      ),
+                    ),
+    );
+  }
+}
+
+// APPLICATION TRACKING SCREEN
+
+class ApplicationsScreen extends StatefulWidget {
+  final ApiService apiService;
+  final VoidCallback onHome;
+  final VoidCallback onLogout;
+  final VoidCallback onJobs;
+
+  const ApplicationsScreen({
+    super.key,
+    required this.apiService,
+    required this.onHome,
+    required this.onLogout,
+    required this.onJobs,
+  });
+
+  @override
+  State<ApplicationsScreen> createState() => _ApplicationsScreenState();
+}
+
+class _ApplicationsScreenState extends State<ApplicationsScreen> {
+  bool _loading = true;
+  String? _error;
+  List<dynamic> _applications = [];
+
+  @override
+  void initState() {
+    super.initState();
+    loadApplications();
+  }
+
+  Future<void> loadApplications() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final result = await widget.apiService.getApplications();
+      final data = result['applications'];
+
+      if (!mounted) return;
+      setState(() {
+        _applications = data is List ? data : [];
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error.toString().replaceFirst('Exception: ', '');
+        _loading = false;
+      });
+    }
+  }
+
+  String statusLabel(String status) {
+    switch (status.toLowerCase()) {
+      case 'saved':
+        return 'Saved';
+      case 'applied':
+        return 'Applied';
+      case 'interview':
+        return 'Interview';
+      case 'rejected':
+        return 'Rejected';
+      case 'offered':
+        return 'Offer Received';
+      case 'withdrawn':
+        return 'Withdrawn';
+      default:
+        return status.isEmpty ? 'Unknown' : status;
+    }
+  }
+
+  Widget applicationCard(Map application) {
+    final title = application['title']?.toString() ?? 'Job Opportunity';
+    final employer = application['employer']?.toString() ?? '';
+    final location = application['location']?.toString() ?? '';
+    final country = application['country']?.toString() ?? '';
+    final date = application['application_date']?.toString() ?? '';
+    final status = application['status']?.toString() ?? '';
+    final notes = application['notes']?.toString() ?? '';
+    final applyUrl =
+        application['official_apply_url']?.toString() ?? '';
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            if (employer.isNotEmpty) ...[
+              const SizedBox(height: 7),
+              Text('Employer: $employer'),
+            ],
+            if (location.isNotEmpty || country.isNotEmpty) ...[
+              const SizedBox(height: 5),
+              Text('Location: ${[location, country].where((v) => v.isNotEmpty).join(', ')}'),
+            ],
+            if (date.isNotEmpty) ...[
+              const SizedBox(height: 5),
+              Text('Application Date: $date'),
+            ],
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Text(
+                  'Status: ',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Chip(
+                  label: Text(statusLabel(status)),
+                  backgroundColor: const Color(0xFFE0F2ED),
+                ),
+              ],
+            ),
+            if (notes.isNotEmpty) ...[
+              const SizedBox(height: 5),
+              Text('Notes: $notes'),
+            ],
+            if (applyUrl.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              const Text(
+                'Official application website:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              SelectableText(
+                applyUrl,
+                style: const TextStyle(
+                  color: Color(0xFF087E65),
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('My Applications'),
+        leading: IconButton(
+          onPressed: widget.onHome,
+          icon: const Icon(Icons.home),
+        ),
+        actions: [
+          IconButton(
+            onPressed: widget.onJobs,
+            icon: const Icon(Icons.work_outline),
+            tooltip: 'Browse Jobs',
+          ),
+          IconButton(
+            onPressed: widget.onLogout,
+            icon: const Icon(Icons.logout),
+          ),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(_error!, textAlign: TextAlign.center),
+                        const SizedBox(height: 16),
+                        FilledButton(
+                          onPressed: loadApplications,
+                          child: const Text('Try Again'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : _applications.isEmpty
+                  ? RefreshIndicator(
+                      onRefresh: loadApplications,
+                      child: ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        children: const [
+                          SizedBox(height: 130),
+                          Icon(
+                            Icons.assignment_outlined,
+                            size: 70,
+                            color: Color(0xFF087E65),
+                          ),
+                          SizedBox(height: 18),
+                          Center(
+                            child: Text(
+                              'No Applications Recorded',
+                              style: TextStyle(
+                                fontSize: 21,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          Center(
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 24),
+                              child: Text(
+                                'Use Apply & Track on a job to record it here.',
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: loadApplications,
+                      child: ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _applications.length,
+                        itemBuilder: (context, index) {
+                          final item = _applications[index];
+                          if (item is! Map) {
+                            return const SizedBox.shrink();
+                          }
+                          return applicationCard(item);
                         },
                       ),
                     ),
@@ -444,12 +1072,14 @@ class ProfileScreen extends StatefulWidget {
   final ApiService apiService;
   final VoidCallback onHome;
   final VoidCallback onLogout;
+  final VoidCallback onApplications;
 
   const ProfileScreen({
     super.key,
     required this.apiService,
     required this.onHome,
     required this.onLogout,
+    required this.onApplications,
   });
 
   @override
@@ -500,9 +1130,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return item.toString();
       }).join(', ');
     }
-
     if (value is String) return value;
-
     return '';
   }
 
@@ -534,19 +1162,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _fullName = data['full_name']?.toString() ?? '';
         _email = data['email']?.toString() ?? '';
         _phone = data['phone']?.toString() ?? '';
-
         _cityController.text = data['city']?.toString() ?? '';
         _countryController.text = data['country']?.toString() ?? '';
-
         _educationController.text = _listToText(data['education']);
         _skillsController.text = _listToText(data['skills']);
         _experienceController.text = _listToText(data['experience']);
-
         _loading = false;
       });
     } catch (error) {
       if (!mounted) return;
-
       setState(() {
         _error = error.toString().replaceFirst('Exception: ', '');
         _loading = false;
@@ -573,8 +1197,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            result['message']?.toString() ??
-                'Profile updated successfully.',
+            result['message']?.toString() ?? 'Profile updated successfully.',
           ),
         ),
       );
@@ -582,18 +1205,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await loadProfile();
     } catch (error) {
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            error.toString().replaceFirst('Exception: ', ''),
-          ),
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
         ),
       );
     } finally {
-      if (mounted) {
-        setState(() => _saving = false);
-      }
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -663,6 +1281,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         actions: [
           IconButton(
+            onPressed: widget.onApplications,
+            icon: const Icon(Icons.assignment_outlined),
+            tooltip: 'My Applications',
+          ),
+          IconButton(
             onPressed: widget.onLogout,
             icon: const Icon(Icons.logout),
             tooltip: 'Logout',
@@ -719,32 +1342,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                         ),
                         _sectionTitle('Personal Information'),
-                        _readOnlyField(
-                          'Full Name',
-                          _fullName,
-                          Icons.person_outline,
-                        ),
-                        _readOnlyField(
-                          'Email Address',
-                          _email,
-                          Icons.email_outlined,
-                        ),
-                        _readOnlyField(
-                          'Phone Number',
-                          _phone,
-                          Icons.phone_outlined,
-                        ),
+                        _readOnlyField('Full Name', _fullName, Icons.person_outline),
+                        _readOnlyField('Email Address', _email, Icons.email_outlined),
+                        _readOnlyField('Phone Number', _phone, Icons.phone_outlined),
                         _sectionTitle('Location'),
-                        _editField(
-                          'City',
-                          _cityController,
-                          Icons.location_city,
-                        ),
-                        _editField(
-                          'Country',
-                          _countryController,
-                          Icons.public,
-                        ),
+                        _editField('City', _cityController, Icons.location_city),
+                        _editField('Country', _countryController, Icons.public),
                         _sectionTitle('Professional Information'),
                         _editField(
                           'Education',
@@ -776,9 +1379,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           child: FilledButton.icon(
                             onPressed: _saving ? null : saveProfile,
                             icon: const Icon(Icons.save),
-                            label: Text(
-                              _saving ? 'Saving...' : 'Save Profile',
-                            ),
+                            label: Text(_saving ? 'Saving...' : 'Save Profile'),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -801,13 +1402,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 // INTERVIEW & TEST PREPARATION PLACEHOLDER
 
 class FeatureScreen extends StatelessWidget {
-  final String feature;
   final VoidCallback onHome;
   final VoidCallback onLogout;
 
   const FeatureScreen({
     super.key,
-    required this.feature,
     required this.onHome,
     required this.onLogout,
   });
@@ -971,15 +1570,11 @@ class _CVBuilderScreenState extends State<CVBuilderScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            error.toString().replaceFirst('Exception: ', ''),
-          ),
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
         ),
       );
     } finally {
-      if (mounted) {
-        setState(() => _isSaving = false);
-      }
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
