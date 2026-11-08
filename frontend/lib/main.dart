@@ -17,9 +17,14 @@ class HunarHubApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF087E65),
+          seedColor: const Color(0xFF087F5B),
         ),
         useMaterial3: true,
+        scaffoldBackgroundColor: const Color(0xFFF7F9FC),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF087F5B),
+          foregroundColor: Colors.white,
+        ),
       ),
       home: const AppHome(),
     );
@@ -37,19 +42,30 @@ class _AppHomeState extends State<AppHome> {
   String? _token;
   String? _selectedFeature;
 
-  void _openFeature(String feature) {
-    setState(() => _selectedFeature = feature);
+  void openFeature(String feature) {
+    if (_token == null) {
+      setState(() => _selectedFeature = feature);
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => LoginScreen(
+            onLoginSuccess: (token) {
+              setState(() {
+                _token = token;
+              });
+
+              Navigator.pop(context);
+            },
+          ),
+        ),
+      );
+    } else {
+      setState(() => _selectedFeature = feature);
+    }
   }
 
-  void _handleLogin(String token) {
-    setState(() => _token = token);
-  }
-
-  void _goHome() {
-    setState(() => _selectedFeature = null);
-  }
-
-  void _logout() {
+  void logout() {
     setState(() {
       _token = null;
       _selectedFeature = null;
@@ -58,213 +74,166 @@ class _AppHomeState extends State<AppHome> {
 
   @override
   Widget build(BuildContext context) {
-    if (_selectedFeature == null) {
-      return HomeScreen(onSelect: _openFeature);
+    if (_token == null || _selectedFeature == null) {
+      return HomeScreen(onFeatureSelected: openFeature);
     }
 
-    if (_token == null) {
-      return LoginScreen(onLogin: _handleLogin);
-    }
-
-    final api = ApiService(token: _token!);
+    final apiService = ApiService(token: _token!);
 
     switch (_selectedFeature) {
-      case 'cv':
-        return CVBuilderScreen(
-          apiService: api,
-          onLogout: _logout,
-          onHome: _goHome,
-        );
-
       case 'jobs':
         return JobsScreen(
-          apiService: api,
-          onLogout: _logout,
-          onHome: _goHome,
-          onSavedJobs: () => _openFeature('saved'),
-          onApplications: () => _openFeature('applications'),
+          apiService: apiService,
+          onLogout: logout,
+          onHome: () => setState(() => _selectedFeature = null),
+        );
+
+      case 'cv':
+        return CVBuilderScreen(
+          apiService: apiService,
+          onLogout: logout,
+          onHome: () => setState(() => _selectedFeature = null),
         );
 
       case 'profile':
         return ProfileScreen(
-          apiService: api,
-          onLogout: _logout,
-          onHome: _goHome,
-          onApplications: () => _openFeature('applications'),
+          apiService: apiService,
+          onLogout: logout,
+          onHome: () => setState(() => _selectedFeature = null),
         );
 
-      case 'saved':
-        return SavedJobsScreen(
-          apiService: api,
-          onLogout: _logout,
-          onHome: _goHome,
-          onJobs: () => _openFeature('jobs'),
-        );
-
-      case 'applications':
-        return ApplicationsScreen(
-          apiService: api,
-          onLogout: _logout,
-          onHome: _goHome,
-          onJobs: () => _openFeature('jobs'),
+      case 'preparation':
+        return FeatureScreen(
+          title: 'Interview & Test Preparation',
+          onLogout: logout,
+          onHome: () => setState(() => _selectedFeature = null),
         );
 
       default:
-        return FeatureScreen(
-          onHome: _goHome,
-          onLogout: _logout,
-        );
+        return HomeScreen(onFeatureSelected: openFeature);
     }
   }
 }
 
-// PUBLIC HOME SCREEN
+// HOME SCREEN
 
 class HomeScreen extends StatelessWidget {
-  final ValueChanged<String> onSelect;
+  final Function(String) onFeatureSelected;
 
   const HomeScreen({
     super.key,
-    required this.onSelect,
+    required this.onFeatureSelected,
   });
-
-  Widget featureCard({
-    required IconData icon,
-    required String title,
-    required String description,
-    required String feature,
-  }) {
-    return Card(
-      elevation: 2,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => onSelect(feature),
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                icon,
-                size: 38,
-                color: const Color(0xFF087E65),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 7),
-              Text(
-                description,
-                style: const TextStyle(fontSize: 13),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Explore →',
-                style: TextStyle(
-                  color: Color(0xFF087E65),
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('HunarHub Pakistan'),
-        centerTitle: true,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 15),
-            const Center(
-              child: Icon(
-                Icons.school,
-                size: 65,
-                color: Color(0xFF087E65),
-              ),
-            ),
             const SizedBox(height: 12),
-            const Center(
-              child: Text(
-                'Your Career. Your Future.',
-                style: TextStyle(
-                  fontSize: 23,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Center(
-              child: Text(
-                'Find jobs, build your CV and prepare for success.',
-                textAlign: TextAlign.center,
-              ),
-            ),
-            const SizedBox(height: 28),
             const Text(
-              'Explore HunarHub',
+              'Build Your Career With HunarHub',
               style: TextStyle(
-                fontSize: 21,
+                fontSize: 25,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 12),
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 0.88,
-              children: [
-                featureCard(
-                  icon: Icons.work_outline,
-                  title: 'Jobs & Internships',
-                  description: 'Explore career opportunities in Pakistan.',
-                  feature: 'jobs',
-                ),
-                featureCard(
-                  icon: Icons.description_outlined,
-                  title: 'CV Builder',
-                  description: 'Create your professional CV.',
-                  feature: 'cv',
-                ),
-                featureCard(
-                  icon: Icons.quiz_outlined,
-                  title: 'Interview & Test Preparation',
-                  description: 'Prepare for interviews and career tests.',
-                  feature: 'preparation',
-                ),
-                featureCard(
-                  icon: Icons.person_outline,
-                  title: 'Profile & Applications',
-                  description: 'Manage your profile and applications.',
-                  feature: 'profile',
-                ),
-              ],
+            const SizedBox(height: 8),
+            const Text(
+              'Your platform for jobs, professional CVs and career preparation.',
+              style: TextStyle(fontSize: 15),
             ),
-            const SizedBox(height: 20),
-            const Center(
-              child: Text(
-                'HunarHub Pakistan',
-                style: TextStyle(color: Colors.grey),
-              ),
+            const SizedBox(height: 28),
+
+            featureCard(
+              context,
+              icon: Icons.work_outline,
+              title: 'Jobs & Internships',
+              description: 'Explore career opportunities.',
+              color: Colors.blue,
+              onTap: () => onFeatureSelected('jobs'),
+            ),
+
+            featureCard(
+              context,
+              icon: Icons.description_outlined,
+              title: 'Professional CV Builder',
+              description: 'Create and manage your CV.',
+              color: Colors.green,
+              onTap: () => onFeatureSelected('cv'),
+            ),
+
+            featureCard(
+              context,
+              icon: Icons.school_outlined,
+              title: 'Interview & Test Preparation',
+              description: 'Prepare for interviews and tests.',
+              color: Colors.orange,
+              onTap: () => onFeatureSelected('preparation'),
+            ),
+
+            featureCard(
+              context,
+              icon: Icons.person_outline,
+              title: 'Profile & Applications',
+              description: 'Manage your profile and applications.',
+              color: Colors.purple,
+              onTap: () => onFeatureSelected('profile'),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget featureCard(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String description,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 27,
+                backgroundColor: color.withAlpha(25),
+                child: Icon(icon, color: color, size: 29),
+              ),
+              const SizedBox(width: 15),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(description),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios, size: 16),
+            ],
+          ),
         ),
       ),
     );
@@ -275,18 +244,14 @@ class HomeScreen extends StatelessWidget {
 
 class JobsScreen extends StatefulWidget {
   final ApiService apiService;
-  final VoidCallback onHome;
   final VoidCallback onLogout;
-  final VoidCallback onSavedJobs;
-  final VoidCallback onApplications;
+  final VoidCallback onHome;
 
   const JobsScreen({
     super.key,
     required this.apiService,
-    required this.onHome,
     required this.onLogout,
-    required this.onSavedJobs,
-    required this.onApplications,
+    required this.onHome,
   });
 
   @override
@@ -297,8 +262,6 @@ class _JobsScreenState extends State<JobsScreen> {
   bool _loading = true;
   String? _error;
   List<dynamic> _jobs = [];
-  final Set<String> _savingIds = {};
-  final Set<String> _applyingIds = {};
 
   @override
   void initState() {
@@ -314,176 +277,71 @@ class _JobsScreenState extends State<JobsScreen> {
 
     try {
       final result = await widget.apiService.getJobs();
-      final dynamic jobsData = result['jobs'];
-
       if (!mounted) return;
 
       setState(() {
-        _jobs = jobsData is List ? jobsData : [];
-        _loading = false;
+        _jobs = result['jobs'] ?? [];
       });
     } catch (error) {
       if (!mounted) return;
-      setState(() {
-        _error = error.toString().replaceFirst('Exception: ', '');
-        _loading = false;
-      });
-    }
-  }
-
-  String jobValue(Map job, String key) {
-    return job[key]?.toString() ?? '';
-  }
-
-  void showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
-  }
-
-  Future<void> saveJob(String jobId) async {
-    if (_savingIds.contains(jobId)) return;
-
-    setState(() => _savingIds.add(jobId));
-
-    try {
-      final result = await widget.apiService.saveJob(jobId);
-      if (!mounted) return;
-      showMessage(
-        result['message']?.toString() ?? 'Job saved successfully.',
-      );
-    } catch (error) {
-      if (!mounted) return;
-      showMessage(error.toString().replaceFirst('Exception: ', ''));
+      setState(() => _error = error.toString());
     } finally {
-      if (mounted) {
-        setState(() => _savingIds.remove(jobId));
-      }
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  Future<void> applyForJob(String jobId) async {
-    if (_applyingIds.contains(jobId)) return;
-
-    setState(() => _applyingIds.add(jobId));
-
-    try {
-      final result = await widget.apiService.applyForJob(jobId);
-      if (!mounted) return;
-
-      showMessage(
-        result['message']?.toString() ??
-            'Application recorded successfully.',
-      );
-    } catch (error) {
-      if (!mounted) return;
-      showMessage(error.toString().replaceFirst('Exception: ', ''));
-    } finally {
-      if (mounted) {
-        setState(() => _applyingIds.remove(jobId));
-      }
-    }
-  }
-
-  Widget jobCard(Map job) {
-    final id = jobValue(job, 'id');
-    final title = jobValue(job, 'title');
-    final employer = jobValue(job, 'employer');
-    final location = jobValue(job, 'location');
-    final country = jobValue(job, 'country');
-    final qualification = jobValue(job, 'qualification');
-    final experience = jobValue(job, 'experience');
-    final salary = jobValue(job, 'salary_information');
-    final deadline = jobValue(job, 'deadline');
-    final applyUrl = jobValue(job, 'official_apply_url');
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 14),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title.isEmpty ? 'Job Opportunity' : title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            if (employer.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text('Employer: $employer'),
-            ],
-            if (location.isNotEmpty || country.isNotEmpty) ...[
-              const SizedBox(height: 5),
-              Text('Location: ${[location, country].where((v) => v.isNotEmpty).join(', ')}'),
-            ],
-            if (qualification.isNotEmpty) ...[
-              const SizedBox(height: 5),
-              Text('Qualification: $qualification'),
-            ],
-            if (experience.isNotEmpty) ...[
-              const SizedBox(height: 5),
-              Text('Experience: $experience'),
-            ],
-            if (salary.isNotEmpty) ...[
-              const SizedBox(height: 5),
-              Text('Salary: $salary'),
-            ],
-            if (deadline.isNotEmpty) ...[
-              const SizedBox(height: 5),
-              Text('Deadline: $deadline'),
-            ],
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: id.isEmpty || _savingIds.contains(id)
-                      ? null
-                      : () => saveJob(id),
-                  icon: const Icon(Icons.bookmark_add_outlined),
-                  label: Text(
-                    _savingIds.contains(id) ? 'Saving...' : 'Save Job',
-                  ),
-                ),
-                FilledButton.icon(
-                  onPressed: id.isEmpty || _applyingIds.contains(id)
-                      ? null
-                      : () => applyForJob(id),
-                  icon: const Icon(Icons.assignment_turned_in_outlined),
-                  label: Text(
-                    _applyingIds.contains(id) ? 'Recording...' : 'Apply & Track',
-                  ),
-                ),
-              ],
-            ),
-            if (applyUrl.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              const Text(
-                'Official application website:',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 4),
-              SelectableText(
-                applyUrl,
-                style: const TextStyle(
-                  color: Color(0xFF087E65),
-                  decoration: TextDecoration.underline,
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Open this official link in your browser to apply with the employer.',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-            ],
-          ],
-        ),
+  void openApplications(bool saved) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => saved
+            ? SavedJobsScreen(apiService: widget.apiService)
+            : ApplicationsScreen(apiService: widget.apiService),
       ),
     );
+  }
+
+  Future<void> saveJob(String id) async {
+    try {
+      final result = await widget.apiService.saveJob(id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result['message']?.toString() ?? 'Job saved.',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString())),
+        );
+      }
+    }
+  }
+
+  Future<void> applyJob(String id) async {
+    try {
+      final result = await widget.apiService.applyForJob(id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result['message']?.toString() ??
+                  'Application recorded.',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString())),
+        );
+      }
+    }
   }
 
   @override
@@ -496,20 +354,26 @@ class _JobsScreenState extends State<JobsScreen> {
           icon: const Icon(Icons.home),
         ),
         actions: [
-          IconButton(
-            onPressed: widget.onSavedJobs,
-            icon: const Icon(Icons.bookmarks_outlined),
-            tooltip: 'Saved Jobs',
-          ),
-          IconButton(
-            onPressed: widget.onApplications,
-            icon: const Icon(Icons.assignment_outlined),
-            tooltip: 'My Applications',
-          ),
-          IconButton(
-            onPressed: widget.onLogout,
-            icon: const Icon(Icons.logout),
-            tooltip: 'Logout',
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'saved') openApplications(true);
+              if (value == 'applications') openApplications(false);
+              if (value == 'logout') widget.onLogout();
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'saved',
+                child: Text('Saved Jobs'),
+              ),
+              PopupMenuItem(
+                value: 'applications',
+                child: Text('My Applications'),
+              ),
+              PopupMenuItem(
+                value: 'logout',
+                child: Text('Logout'),
+              ),
+            ],
           ),
         ],
       ),
@@ -517,52 +381,30 @@ class _JobsScreenState extends State<JobsScreen> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.cloud_off, size: 55),
-                        const SizedBox(height: 15),
-                        Text(_error!, textAlign: TextAlign.center),
-                        const SizedBox(height: 18),
-                        FilledButton(
-                          onPressed: loadJobs,
-                          child: const Text('Try Again'),
-                        ),
-                      ],
-                    ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(_error!),
+                      ElevatedButton(
+                        onPressed: loadJobs,
+                        child: const Text('Retry'),
+                      ),
+                    ],
                   ),
                 )
               : _jobs.isEmpty
                   ? RefreshIndicator(
                       onRefresh: loadJobs,
                       child: ListView(
-                        physics: const AlwaysScrollableScrollPhysics(),
                         children: const [
-                          SizedBox(height: 130),
-                          Icon(
-                            Icons.work_outline,
-                            size: 75,
-                            color: Color(0xFF087E65),
-                          ),
-                          SizedBox(height: 20),
+                          SizedBox(height: 150),
                           Center(
-                            child: Text(
-                              'No Jobs Published Yet',
-                              style: TextStyle(
-                                fontSize: 21,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                            child: Text('No Jobs Published Yet'),
                           ),
                           SizedBox(height: 10),
-                          Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 30),
+                          Center(
                             child: Text(
-                              'New jobs and internships will appear here. '
-                              'Please check again later.',
-                              textAlign: TextAlign.center,
+                              'New verified opportunities will appear here.',
                             ),
                           ),
                         ],
@@ -574,11 +416,70 @@ class _JobsScreenState extends State<JobsScreen> {
                         padding: const EdgeInsets.all(16),
                         itemCount: _jobs.length,
                         itemBuilder: (context, index) {
-                          final item = _jobs[index];
-                          if (item is! Map) {
-                            return const SizedBox.shrink();
-                          }
-                          return jobCard(item);
+                          final job = Map<String, dynamic>.from(
+                            _jobs[index],
+                          );
+
+                          final id = job['id'].toString();
+
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 14),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    job['title']?.toString() ?? '',
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    job['employer']?.toString() ??
+                                        'Employer not specified',
+                                  ),
+                                  Text(
+                                    job['location']?.toString() ??
+                                        'Location not specified',
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    job['description']?.toString() ?? '',
+                                    maxLines: 4,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Wrap(
+                                    spacing: 8,
+                                    children: [
+                                      OutlinedButton.icon(
+                                        onPressed: () => saveJob(id),
+                                        icon: const Icon(Icons.bookmark),
+                                        label: const Text('Save'),
+                                      ),
+                                      FilledButton(
+                                        onPressed: () => applyJob(id),
+                                        child: const Text('Apply'),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  if (job['official_apply_url'] != null)
+                                    SelectableText(
+                                      'Official application: ${job['official_apply_url']}',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.blue,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          );
                         },
                       ),
                     ),
@@ -590,16 +491,10 @@ class _JobsScreenState extends State<JobsScreen> {
 
 class SavedJobsScreen extends StatefulWidget {
   final ApiService apiService;
-  final VoidCallback onHome;
-  final VoidCallback onLogout;
-  final VoidCallback onJobs;
 
   const SavedJobsScreen({
     super.key,
     required this.apiService,
-    required this.onHome,
-    required this.onLogout,
-    required this.onJobs,
   });
 
   @override
@@ -608,9 +503,7 @@ class SavedJobsScreen extends StatefulWidget {
 
 class _SavedJobsScreenState extends State<SavedJobsScreen> {
   bool _loading = true;
-  String? _error;
   List<dynamic> _jobs = [];
-  final Set<String> _removingIds = {};
 
   @override
   void initState() {
@@ -619,119 +512,38 @@ class _SavedJobsScreenState extends State<SavedJobsScreen> {
   }
 
   Future<void> loadSavedJobs() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    setState(() => _loading = true);
 
     try {
       final result = await widget.apiService.getSavedJobs();
-      final data = result['jobs'];
 
       if (!mounted) return;
+
       setState(() {
-        _jobs = data is List ? data : [];
-        _loading = false;
+        _jobs = result['jobs'] ?? result['saved_jobs'] ?? [];
       });
     } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _error = error.toString().replaceFirst('Exception: ', '');
-        _loading = false;
-      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString())),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> removeJob(String id) async {
-    if (_removingIds.contains(id)) return;
-
-    setState(() => _removingIds.add(id));
-
     try {
-      final result = await widget.apiService.removeSavedJob(id);
-      if (!mounted) return;
-
-      setState(() {
-        _jobs.removeWhere(
-          (item) => item is Map && item['id'].toString() == id,
-        );
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            result['message']?.toString() ?? 'Saved job removed.',
-          ),
-        ),
-      );
+      await widget.apiService.removeSavedJob(id);
+      await loadSavedJobs();
     } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.toString().replaceFirst('Exception: ', '')),
-        ),
-      );
-    } finally {
       if (mounted) {
-        setState(() => _removingIds.remove(id));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString())),
+        );
       }
     }
-  }
-
-  Widget savedJobCard(Map job) {
-    final id = job['id']?.toString() ?? '';
-    final title = job['title']?.toString() ?? 'Job Opportunity';
-    final employer = job['employer']?.toString() ?? '';
-    final location = job['location']?.toString() ?? '';
-    final country = job['country']?.toString() ?? '';
-    final applyUrl = job['official_apply_url']?.toString() ?? '';
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            if (employer.isNotEmpty) ...[
-              const SizedBox(height: 7),
-              Text('Employer: $employer'),
-            ],
-            if (location.isNotEmpty || country.isNotEmpty) ...[
-              const SizedBox(height: 5),
-              Text('Location: ${[location, country].where((v) => v.isNotEmpty).join(', ')}'),
-            ],
-            if (applyUrl.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              SelectableText(
-                applyUrl,
-                style: const TextStyle(
-                  color: Color(0xFF087E65),
-                  decoration: TextDecoration.underline,
-                ),
-              ),
-            ],
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: id.isEmpty || _removingIds.contains(id)
-                  ? null
-                  : () => removeJob(id),
-              icon: const Icon(Icons.delete_outline),
-              label: Text(
-                _removingIds.contains(id) ? 'Removing...' : 'Remove Saved Job',
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   @override
@@ -739,87 +551,45 @@ class _SavedJobsScreenState extends State<SavedJobsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Saved Jobs'),
-        leading: IconButton(
-          onPressed: widget.onHome,
-          icon: const Icon(Icons.home),
-        ),
         actions: [
           IconButton(
-            onPressed: widget.onJobs,
-            icon: const Icon(Icons.work_outline),
-            tooltip: 'Browse Jobs',
-          ),
-          IconButton(
-            onPressed: widget.onLogout,
-            icon: const Icon(Icons.logout),
+            onPressed: loadSavedJobs,
+            icon: const Icon(Icons.refresh),
           ),
         ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(_error!, textAlign: TextAlign.center),
-                        const SizedBox(height: 16),
-                        FilledButton(
-                          onPressed: loadSavedJobs,
-                          child: const Text('Try Again'),
+          : _jobs.isEmpty
+              ? const Center(child: Text('No saved jobs yet.'))
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _jobs.length,
+                  itemBuilder: (context, index) {
+                    final job = Map<String, dynamic>.from(
+                      _jobs[index],
+                    );
+
+                    return Card(
+                      child: ListTile(
+                        title: Text(
+                          job['title']?.toString() ?? 'Job',
                         ),
-                      ],
-                    ),
-                  ),
-                )
-              : _jobs.isEmpty
-                  ? RefreshIndicator(
-                      onRefresh: loadSavedJobs,
-                      child: ListView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        children: const [
-                          SizedBox(height: 130),
-                          Icon(
-                            Icons.bookmark_border,
-                            size: 70,
-                            color: Color(0xFF087E65),
+                        subtitle: Text(
+                          job['employer']?.toString() ?? '',
+                        ),
+                        trailing: IconButton(
+                          onPressed: () =>
+                              removeJob(job['id'].toString()),
+                          icon: const Icon(
+                            Icons.delete_outline,
+                            color: Colors.red,
                           ),
-                          SizedBox(height: 18),
-                          Center(
-                            child: Text(
-                              'No Saved Jobs Yet',
-                              style: TextStyle(
-                                fontSize: 21,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          SizedBox(height: 8),
-                          Center(
-                            child: Text(
-                              'Save interesting jobs to find them here.',
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: loadSavedJobs,
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _jobs.length,
-                        itemBuilder: (context, index) {
-                          final item = _jobs[index];
-                          if (item is! Map) {
-                            return const SizedBox.shrink();
-                          }
-                          return savedJobCard(item);
-                        },
-                      ),
-                    ),
+                    );
+                  },
+                ),
     );
   }
 }
@@ -828,25 +598,19 @@ class _SavedJobsScreenState extends State<SavedJobsScreen> {
 
 class ApplicationsScreen extends StatefulWidget {
   final ApiService apiService;
-  final VoidCallback onHome;
-  final VoidCallback onLogout;
-  final VoidCallback onJobs;
 
   const ApplicationsScreen({
     super.key,
     required this.apiService,
-    required this.onHome,
-    required this.onLogout,
-    required this.onJobs,
   });
 
   @override
-  State<ApplicationsScreen> createState() => _ApplicationsScreenState();
+  State<ApplicationsScreen> createState() =>
+      _ApplicationsScreenState();
 }
 
 class _ApplicationsScreenState extends State<ApplicationsScreen> {
   bool _loading = true;
-  String? _error;
   List<dynamic> _applications = [];
 
   @override
@@ -856,121 +620,25 @@ class _ApplicationsScreenState extends State<ApplicationsScreen> {
   }
 
   Future<void> loadApplications() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    setState(() => _loading = true);
 
     try {
       final result = await widget.apiService.getApplications();
-      final data = result['applications'];
 
       if (!mounted) return;
+
       setState(() {
-        _applications = data is List ? data : [];
-        _loading = false;
+        _applications = result['applications'] ?? [];
       });
     } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _error = error.toString().replaceFirst('Exception: ', '');
-        _loading = false;
-      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString())),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
-  }
-
-  String statusLabel(String status) {
-    switch (status.toLowerCase()) {
-      case 'saved':
-        return 'Saved';
-      case 'applied':
-        return 'Applied';
-      case 'interview':
-        return 'Interview';
-      case 'rejected':
-        return 'Rejected';
-      case 'offered':
-        return 'Offer Received';
-      case 'withdrawn':
-        return 'Withdrawn';
-      default:
-        return status.isEmpty ? 'Unknown' : status;
-    }
-  }
-
-  Widget applicationCard(Map application) {
-    final title = application['title']?.toString() ?? 'Job Opportunity';
-    final employer = application['employer']?.toString() ?? '';
-    final location = application['location']?.toString() ?? '';
-    final country = application['country']?.toString() ?? '';
-    final date = application['application_date']?.toString() ?? '';
-    final status = application['status']?.toString() ?? '';
-    final notes = application['notes']?.toString() ?? '';
-    final applyUrl =
-        application['official_apply_url']?.toString() ?? '';
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            if (employer.isNotEmpty) ...[
-              const SizedBox(height: 7),
-              Text('Employer: $employer'),
-            ],
-            if (location.isNotEmpty || country.isNotEmpty) ...[
-              const SizedBox(height: 5),
-              Text('Location: ${[location, country].where((v) => v.isNotEmpty).join(', ')}'),
-            ],
-            if (date.isNotEmpty) ...[
-              const SizedBox(height: 5),
-              Text('Application Date: $date'),
-            ],
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                const Text(
-                  'Status: ',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                Chip(
-                  label: Text(statusLabel(status)),
-                  backgroundColor: const Color(0xFFE0F2ED),
-                ),
-              ],
-            ),
-            if (notes.isNotEmpty) ...[
-              const SizedBox(height: 5),
-              Text('Notes: $notes'),
-            ],
-            if (applyUrl.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              const Text(
-                'Official application website:',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 4),
-              SelectableText(
-                applyUrl,
-                style: const TextStyle(
-                  color: Color(0xFF087E65),
-                  decoration: TextDecoration.underline,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
   }
 
   @override
@@ -978,90 +646,41 @@ class _ApplicationsScreenState extends State<ApplicationsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('My Applications'),
-        leading: IconButton(
-          onPressed: widget.onHome,
-          icon: const Icon(Icons.home),
-        ),
         actions: [
           IconButton(
-            onPressed: widget.onJobs,
-            icon: const Icon(Icons.work_outline),
-            tooltip: 'Browse Jobs',
-          ),
-          IconButton(
-            onPressed: widget.onLogout,
-            icon: const Icon(Icons.logout),
+            onPressed: loadApplications,
+            icon: const Icon(Icons.refresh),
           ),
         ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(_error!, textAlign: TextAlign.center),
-                        const SizedBox(height: 16),
-                        FilledButton(
-                          onPressed: loadApplications,
-                          child: const Text('Try Again'),
-                        ),
-                      ],
-                    ),
-                  ),
+          : _applications.isEmpty
+              ? const Center(
+                  child: Text('No application recorded.'),
                 )
-              : _applications.isEmpty
-                  ? RefreshIndicator(
-                      onRefresh: loadApplications,
-                      child: ListView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        children: const [
-                          SizedBox(height: 130),
-                          Icon(
-                            Icons.assignment_outlined,
-                            size: 70,
-                            color: Color(0xFF087E65),
-                          ),
-                          SizedBox(height: 18),
-                          Center(
-                            child: Text(
-                              'No Applications Recorded',
-                              style: TextStyle(
-                                fontSize: 21,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          SizedBox(height: 8),
-                          Center(
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 24),
-                              child: Text(
-                                'Use Apply & Track on a job to record it here.',
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          ),
-                        ],
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _applications.length,
+                  itemBuilder: (context, index) {
+                    final application =
+                        Map<String, dynamic>.from(
+                      _applications[index],
+                    );
+
+                    return Card(
+                      child: ListTile(
+                        title: Text(
+                          application['title']?.toString() ??
+                              'Job Application',
+                        ),
+                        subtitle: Text(
+                          'Status: ${application['status'] ?? 'Applied'}',
+                        ),
                       ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: loadApplications,
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _applications.length,
-                        itemBuilder: (context, index) {
-                          final item = _applications[index];
-                          if (item is! Map) {
-                            return const SizedBox.shrink();
-                          }
-                          return applicationCard(item);
-                        },
-                      ),
-                    ),
+                    );
+                  },
+                ),
     );
   }
 }
@@ -1070,16 +689,14 @@ class _ApplicationsScreenState extends State<ApplicationsScreen> {
 
 class ProfileScreen extends StatefulWidget {
   final ApiService apiService;
-  final VoidCallback onHome;
   final VoidCallback onLogout;
-  final VoidCallback onApplications;
+  final VoidCallback onHome;
 
   const ProfileScreen({
     super.key,
     required this.apiService,
-    required this.onHome,
     required this.onLogout,
-    required this.onApplications,
+    required this.onHome,
   });
 
   @override
@@ -1087,8 +704,6 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final _formKey = GlobalKey<FormState>();
-
   final _cityController = TextEditingController();
   final _countryController = TextEditingController();
   final _educationController = TextEditingController();
@@ -1097,9 +712,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   bool _loading = true;
   bool _saving = false;
-  String? _error;
 
-  String _fullName = '';
+  String _name = '';
   String _email = '';
   String _phone = '';
 
@@ -1119,22 +733,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
-  String _listToText(dynamic value) {
+  String listToText(dynamic value) {
     if (value is List) {
-      return value.map((item) {
-        if (item is Map) {
-          return item.entries
-              .map((entry) => '${entry.key}: ${entry.value}')
-              .join(' | ');
-        }
-        return item.toString();
-      }).join(', ');
+      return value.join(', ');
     }
-    if (value is String) return value;
     return '';
   }
 
-  List<String> _textToList(String value) {
+  List<String> textToList(String value) {
     return value
         .split(',')
         .map((item) => item.trim())
@@ -1143,128 +749,87 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> loadProfile() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
     try {
       final result = await widget.apiService.getProfile();
-      final dynamic data = result['profile'];
 
-      if (data is! Map) {
-        throw Exception('Profile data is unavailable.');
-      }
+      final profile = result['profile'] is Map
+          ? Map<String, dynamic>.from(result['profile'])
+          : result;
 
       if (!mounted) return;
 
       setState(() {
-        _fullName = data['full_name']?.toString() ?? '';
-        _email = data['email']?.toString() ?? '';
-        _phone = data['phone']?.toString() ?? '';
-        _cityController.text = data['city']?.toString() ?? '';
-        _countryController.text = data['country']?.toString() ?? '';
-        _educationController.text = _listToText(data['education']);
-        _skillsController.text = _listToText(data['skills']);
-        _experienceController.text = _listToText(data['experience']);
-        _loading = false;
+        _name = profile['full_name']?.toString() ?? '';
+        _email = profile['email']?.toString() ?? '';
+        _phone = profile['phone']?.toString() ?? '';
+
+        _cityController.text =
+            profile['city']?.toString() ?? '';
+        _countryController.text =
+            profile['country']?.toString() ?? 'Pakistan';
+
+        _educationController.text =
+            listToText(profile['education']);
+        _skillsController.text =
+            listToText(profile['skills']);
+        _experienceController.text =
+            listToText(profile['experience']);
       });
     } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _error = error.toString().replaceFirst('Exception: ', '');
-        _loading = false;
-      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString())),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> saveProfile() async {
-    if (!_formKey.currentState!.validate()) return;
-
     setState(() => _saving = true);
 
     try {
       final result = await widget.apiService.updateProfile(
         city: _cityController.text.trim(),
         country: _countryController.text.trim(),
-        education: _textToList(_educationController.text),
-        skills: _textToList(_skillsController.text),
-        experience: _textToList(_experienceController.text),
+        education: textToList(_educationController.text),
+        skills: textToList(_skillsController.text),
+        experience: textToList(_experienceController.text),
       );
 
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            result['message']?.toString() ?? 'Profile updated successfully.',
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result['message']?.toString() ??
+                  'Profile updated successfully.',
+            ),
           ),
-        ),
-      );
-
-      await loadProfile();
+        );
+      }
     } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.toString().replaceFirst('Exception: ', '')),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString())),
+        );
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
-  Widget _readOnlyField(String label, String value, IconData icon) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: TextFormField(
-        initialValue: value,
-        readOnly: true,
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon: Icon(icon),
-          border: const OutlineInputBorder(),
-        ),
-      ),
-    );
-  }
-
-  Widget _editField(
+  Widget field(
     String label,
     TextEditingController controller,
-    IconData icon, {
-    int lines = 1,
-  }) {
+  ) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
-      child: TextFormField(
+      child: TextField(
         controller: controller,
-        maxLines: lines,
         decoration: InputDecoration(
           labelText: label,
-          prefixIcon: Icon(icon),
           border: const OutlineInputBorder(),
-        ),
-        validator: (value) {
-          if (value == null || value.trim().isEmpty) {
-            return 'Please enter $label';
-          }
-          return null;
-        },
-      ),
-    );
-  }
-
-  Widget _sectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 12, bottom: 16),
-      child: Text(
-        title,
-        style: const TextStyle(
-          fontSize: 19,
-          fontWeight: FontWeight.bold,
-          color: Color(0xFF087E65),
         ),
       ),
     );
@@ -1281,141 +846,75 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         actions: [
           IconButton(
-            onPressed: widget.onApplications,
-            icon: const Icon(Icons.assignment_outlined),
-            tooltip: 'My Applications',
-          ),
-          IconButton(
             onPressed: widget.onLogout,
             icon: const Icon(Icons.logout),
-            tooltip: 'Logout',
           ),
         ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.person_off, size: 55),
-                        const SizedBox(height: 15),
-                        Text(_error!, textAlign: TextAlign.center),
-                        const SizedBox(height: 18),
-                        FilledButton(
-                          onPressed: loadProfile,
-                          child: const Text('Try Again'),
-                        ),
-                      ],
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  const CircleAvatar(
+                    radius: 35,
+                    child: Icon(Icons.person, size: 38),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    _name,
+                    style: const TextStyle(
+                      fontSize: 21,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                )
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Center(
-                          child: CircleAvatar(
-                            radius: 42,
-                            backgroundColor: Color(0xFF087E65),
-                            child: Icon(
-                              Icons.person,
-                              color: Colors.white,
-                              size: 48,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Center(
-                          child: Text(
-                            _fullName.isEmpty ? 'My Account' : _fullName,
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        _sectionTitle('Personal Information'),
-                        _readOnlyField('Full Name', _fullName, Icons.person_outline),
-                        _readOnlyField('Email Address', _email, Icons.email_outlined),
-                        _readOnlyField('Phone Number', _phone, Icons.phone_outlined),
-                        _sectionTitle('Location'),
-                        _editField('City', _cityController, Icons.location_city),
-                        _editField('Country', _countryController, Icons.public),
-                        _sectionTitle('Professional Information'),
-                        _editField(
-                          'Education',
-                          _educationController,
-                          Icons.school_outlined,
-                          lines: 3,
-                        ),
-                        _editField(
-                          'Skills',
-                          _skillsController,
-                          Icons.star_outline,
-                          lines: 3,
-                        ),
-                        _editField(
-                          'Work Experience',
-                          _experienceController,
-                          Icons.work_outline,
-                          lines: 4,
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'For Education, Skills and Experience, '
-                          'separate each entry with a comma.',
-                          style: TextStyle(color: Colors.grey),
-                        ),
-                        const SizedBox(height: 20),
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton.icon(
-                            onPressed: _saving ? null : saveProfile,
-                            icon: const Icon(Icons.save),
-                            label: Text(_saving ? 'Saving...' : 'Save Profile'),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: loadProfile,
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('Refresh Profile'),
-                          ),
-                        ),
-                      ],
+                  Text(_email),
+                  Text(_phone),
+                  const SizedBox(height: 24),
+                  field('City', _cityController),
+                  field('Country', _countryController),
+                  field('Education (comma separated)',
+                      _educationController),
+                  field('Skills (comma separated)',
+                      _skillsController),
+                  field('Experience (comma separated)',
+                      _experienceController),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: _saving ? null : saveProfile,
+                      child: Text(
+                        _saving ? 'Saving...' : 'Save Profile',
+                      ),
                     ),
                   ),
-                ),
+                ],
+              ),
+            ),
     );
   }
 }
 
-// INTERVIEW & TEST PREPARATION PLACEHOLDER
+// INTERVIEW AND TEST PREPARATION
 
 class FeatureScreen extends StatelessWidget {
-  final VoidCallback onHome;
+  final String title;
   final VoidCallback onLogout;
+  final VoidCallback onHome;
 
   const FeatureScreen({
     super.key,
-    required this.onHome,
+    required this.title,
     required this.onLogout,
+    required this.onHome,
   });
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('HunarHub Pakistan'),
+        title: Text(title),
         leading: IconButton(
           onPressed: onHome,
           icon: const Icon(Icons.home),
@@ -1427,43 +926,13 @@ class FeatureScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: Center(
+      body: const Center(
         child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.quiz_outlined,
-                size: 60,
-                color: Color(0xFF087E65),
-              ),
-              const SizedBox(height: 18),
-              const Text(
-                'Interview & Test Preparation',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 23,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Career preparation for banking, government jobs, '
-                'private sector and other professions.',
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 18),
-              const Text(
-                'This section is under development.',
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 20),
-              FilledButton(
-                onPressed: onHome,
-                child: const Text('Back to Home'),
-              ),
-            ],
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'Interview and Test Preparation content is under development.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 17),
           ),
         ),
       ),
@@ -1471,7 +940,7 @@ class FeatureScreen extends StatelessWidget {
   }
 }
 
-// CV BUILDER
+// CV BUILDER AND CV MANAGEMENT
 
 class CVBuilderScreen extends StatefulWidget {
   final ApiService apiService;
@@ -1491,6 +960,7 @@ class CVBuilderScreen extends StatefulWidget {
 
 class _CVBuilderScreenState extends State<CVBuilderScreen> {
   final _formKey = GlobalKey<FormState>();
+
   final _titleController = TextEditingController();
   final _nameController = TextEditingController();
   final _jobController = TextEditingController();
@@ -1498,7 +968,18 @@ class _CVBuilderScreenState extends State<CVBuilderScreen> {
   final _skillsController = TextEditingController();
 
   String _cvType = 'banking';
+  String? _editingCvId;
+
   bool _isSaving = false;
+  bool _isLoadingCVs = false;
+
+  List<Map<String, dynamic>> _savedCVs = [];
+
+  @override
+  void initState() {
+    super.initState();
+    loadCVs();
+  }
 
   @override
   void dispose() {
@@ -1508,6 +989,39 @@ class _CVBuilderScreenState extends State<CVBuilderScreen> {
     _summaryController.dispose();
     _skillsController.dispose();
     super.dispose();
+  }
+
+  void showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  Future<void> loadCVs() async {
+    setState(() => _isLoadingCVs = true);
+
+    try {
+      final result = await widget.apiService.getCVs();
+      final List<dynamic> cvs = result['cvs'] ?? [];
+
+      if (!mounted) return;
+
+      setState(() {
+        _savedCVs = cvs
+            .map((cv) => Map<String, dynamic>.from(cv as Map))
+            .toList();
+      });
+    } catch (error) {
+      if (mounted) {
+        showMessage(
+          error.toString().replaceFirst('Exception: ', ''),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingCVs = false);
+      }
+    }
   }
 
   Widget buildField(
@@ -1534,48 +1048,297 @@ class _CVBuilderScreenState extends State<CVBuilderScreen> {
     );
   }
 
+  void clearForm() {
+    _titleController.clear();
+    _nameController.clear();
+    _jobController.clear();
+    _summaryController.clear();
+    _skillsController.clear();
+
+    setState(() {
+      _cvType = 'banking';
+      _editingCvId = null;
+    });
+  }
+
+  void editCV(Map<String, dynamic> cv) {
+    final content = cv['content'] is Map
+        ? Map<String, dynamic>.from(cv['content'])
+        : <String, dynamic>{};
+
+    final skills = content['skills'];
+
+    _titleController.text = cv['title']?.toString() ?? '';
+    _nameController.text =
+        content['full_name']?.toString() ?? '';
+    _jobController.text =
+        content['professional_title']?.toString() ?? '';
+    _summaryController.text =
+        content['professional_summary']?.toString() ?? '';
+
+    _skillsController.text = skills is List
+        ? skills.join(', ')
+        : skills?.toString() ?? '';
+
+    setState(() {
+      _cvType = cv['cv_type']?.toString() ?? 'banking';
+      _editingCvId = cv['id'].toString();
+    });
+
+    showMessage('CV loaded for editing.');
+
+    // Move the user back to the top of the form.
+  }
+
   Future<void> saveCV() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isSaving = true);
 
+    final content = <String, dynamic>{
+      'full_name': _nameController.text.trim(),
+      'professional_title': _jobController.text.trim(),
+      'professional_summary': _summaryController.text.trim(),
+      'skills': _skillsController.text
+          .split(',')
+          .map((skill) => skill.trim())
+          .where((skill) => skill.isNotEmpty)
+          .toList(),
+    };
+
     try {
-      final result = await widget.apiService.createCV(
-        title: _titleController.text.trim(),
-        cvType: _cvType,
-        templateName: 'professional',
-        content: {
-          'full_name': _nameController.text.trim(),
-          'professional_title': _jobController.text.trim(),
-          'professional_summary': _summaryController.text.trim(),
-          'skills': _skillsController.text
-              .split(',')
-              .map((skill) => skill.trim())
-              .where((skill) => skill.isNotEmpty)
-              .toList(),
-        },
-      );
+      Map<String, dynamic> result;
+
+      if (_editingCvId == null) {
+        result = await widget.apiService.createCV(
+          title: _titleController.text.trim(),
+          cvType: _cvType,
+          templateName: 'professional',
+          content: content,
+        );
+      } else {
+        result = await widget.apiService.updateCV(
+          id: _editingCvId!,
+          title: _titleController.text.trim(),
+          cvType: _cvType,
+          templateName: 'professional',
+          content: content,
+        );
+      }
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            result['message']?.toString() ?? 'CV saved successfully.',
-          ),
-        ),
+      showMessage(
+        result['message']?.toString() ?? 'CV saved successfully.',
       );
+
+      clearForm();
+      await loadCVs();
     } catch (error) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.toString().replaceFirst('Exception: ', '')),
-        ),
-      );
+      if (mounted) {
+        showMessage(
+          error.toString().replaceFirst('Exception: ', ''),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  void viewCV(Map<String, dynamic> cv) {
+    final content = cv['content'] is Map
+        ? Map<String, dynamic>.from(cv['content'])
+        : <String, dynamic>{};
+
+    final skills = content['skills'];
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(cv['title']?.toString() ?? 'My CV'),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  content['full_name']?.toString() ?? '',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  content['professional_title']?.toString() ?? '',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Divider(height: 24),
+                const Text(
+                  'Professional Summary',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  content['professional_summary']?.toString() ?? '',
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Skills',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  skills is List
+                      ? skills.join(', ')
+                      : skills?.toString() ?? '',
+                ),
+                const SizedBox(height: 16),
+                Text('CV Type: ${cv['cv_type'] ?? ''}'),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> deleteCV(Map<String, dynamic> cv) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Delete CV?'),
+          content: Text(
+            'Are you sure you want to delete "${cv['title']}"?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () =>
+                  Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () =>
+                  Navigator.pop(dialogContext, true),
+              child: const Text(
+                'Delete',
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
+    try {
+      final result = await widget.apiService.deleteCV(
+        cv['id'].toString(),
+      );
+
+      if (!mounted) return;
+
+      if (_editingCvId == cv['id'].toString()) {
+        clearForm();
+      }
+
+      showMessage(
+        result['message']?.toString() ?? 'CV deleted successfully.',
+      );
+
+      await loadCVs();
+    } catch (error) {
+      if (mounted) {
+        showMessage(
+          error.toString().replaceFirst('Exception: ', ''),
+        );
+      }
+    }
+  }
+
+  Widget buildSavedCVs() {
+    if (_isLoadingCVs) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (_savedCVs.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Text(
+          'No saved CVs yet. Create your first CV above.',
+        ),
+      );
+    }
+
+    return Column(
+      children: _savedCVs.map((cv) {
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  cv['title']?.toString() ?? 'Untitled CV',
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  'Type: ${cv['cv_type'] ?? 'Not specified'}',
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    TextButton.icon(
+                      onPressed: () => viewCV(cv),
+                      icon: const Icon(Icons.visibility),
+                      label: const Text('View'),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => editCV(cv),
+                      icon: const Icon(Icons.edit),
+                      label: const Text('Edit'),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => deleteCV(cv),
+                      icon: const Icon(
+                        Icons.delete,
+                        color: Colors.red,
+                      ),
+                      label: const Text(
+                        'Delete',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
   }
 
   @override
@@ -1611,11 +1374,21 @@ class _CVBuilderScreenState extends State<CVBuilderScreen> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Create your professional CV for job applications.',
+                'Create and manage your professional CVs.',
               ),
               const SizedBox(height: 24),
+              Text(
+                _editingCvId == null
+                    ? 'Create New CV'
+                    : 'Edit Existing CV',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                initialValue: _cvType,
+                value: _cvType,
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),
                   labelText: 'CV Type',
@@ -1654,15 +1427,53 @@ class _CVBuilderScreenState extends State<CVBuilderScreen> {
                 _skillsController,
                 lines: 3,
               ),
-              const SizedBox(height: 10),
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
                   onPressed: _isSaving ? null : saveCV,
                   icon: const Icon(Icons.save),
-                  label: Text(_isSaving ? 'Saving...' : 'Save CV'),
+                  label: Text(
+                    _isSaving
+                        ? 'Saving...'
+                        : _editingCvId == null
+                            ? 'Save CV'
+                            : 'Update CV',
+                  ),
                 ),
               ),
+              if (_editingCvId != null) ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: clearForm,
+                    child: const Text('Cancel Editing'),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 32),
+              const Divider(),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'My Saved CVs',
+                      style: TextStyle(
+                        fontSize: 21,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: loadCVs,
+                    tooltip: 'Refresh CVs',
+                    icon: const Icon(Icons.refresh),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              buildSavedCVs(),
             ],
           ),
         ),
