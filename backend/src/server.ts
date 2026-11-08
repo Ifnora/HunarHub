@@ -8,6 +8,8 @@ import authRouter from "./auth";
 import profileRouter from "./routes/profile";
 import cvRouter from "./routes/cv";
 import applicationsRouter from "./routes/applications";
+import adminRouter from "./routes/admin";
+
 dotenv.config();
 
 const app = express();
@@ -24,8 +26,13 @@ app.use("/profile", profileRouter);
 
 // CV BUILDER ROUTES
 app.use("/cv", cvRouter);
-// SAVED JOBS AND APPLICATION TRACKING ROUTES
+
+// SAVED JOBS AND APPLICATION TRACKING
 app.use("/applications", applicationsRouter);
+
+// ADMIN JOB MANAGEMENT ROUTES
+app.use("/admin", adminRouter);
+
 // HOME
 app.get("/", (_req, res) => {
   res.status(200).json({
@@ -127,7 +134,10 @@ app.get("/jobs", async (req, res) => {
     if (categoryId) {
       const parsedCategoryId = Number(categoryId);
 
-      if (!Number.isSafeInteger(parsedCategoryId) || parsedCategoryId < 1) {
+      if (
+        !Number.isSafeInteger(parsedCategoryId) ||
+        parsedCategoryId < 1
+      ) {
         return res.status(400).json({
           success: false,
           message: "Invalid category_id"
