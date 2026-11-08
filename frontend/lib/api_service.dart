@@ -1,3 +1,4 @@
+
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
@@ -286,6 +287,20 @@ class ApiService {
   ) async {
     final response = await http.patch(
       Uri.parse('$baseUrl/admin/jobs/$jobId/reject'),
+      headers: _headers,
+    );
+
+    return _handleResponse(response);
+  }
+
+  // ==============================
+  // AUTOMATIC JOB COLLECTOR
+  // ==============================
+
+  // RUN AUTOMATIC JOB COLLECTION
+  Future<Map<String, dynamic>> runJobCollector() async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/admin/collector/run'),
       headers: _headers,
     );
 
