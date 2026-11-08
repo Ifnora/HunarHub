@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'api_service.dart';
 import 'login_screen.dart';
 import 'admin_jobs_screen.dart';
-
+import 'cv_builder_screen.dart';
 void main() {
   runApp(const HunarHubApp());
 }
@@ -104,11 +104,11 @@ class _AppHomeState extends State<AppHome> {
         );
 
       case 'cv':
-        return CVBuilderScreen(
-          apiService: apiService,
-          onLogout: logout,
-          onHome: goHome,
-        );
+  return ProfessionalCVBuilderScreen(
+    apiService: apiService,
+    onLogout: logout,
+    onHome: goHome,
+  );
 
       case 'profile':
         return ProfileScreen(
