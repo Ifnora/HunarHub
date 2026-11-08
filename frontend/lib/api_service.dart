@@ -48,6 +48,15 @@ class ApiService {
     return _handleResponse(response);
   }
 
+  // GET JOB CATEGORIES
+  Future<Map<String, dynamic>> getJobCategories() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/job-categories'),
+    );
+
+    return _handleResponse(response);
+  }
+
   // GET USER PROFILE
   Future<Map<String, dynamic>> getProfile() async {
     final response = await http.get(
