@@ -1,3 +1,4 @@
+
 name: hunarhub
 description: HunarHub Pakistan Career Platform
 publish_to: 'none'
@@ -9,7 +10,15 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+
   http: ^1.2.2
+
+  # Professional PDF generation
+  pdf: ^3.12.0
+  printing: ^5.14.3
+
+  # Select profile photo from phone gallery
+  image_picker: ^1.1.2
 
 dev_dependencies:
   flutter_test:
