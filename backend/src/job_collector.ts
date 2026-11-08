@@ -1,3 +1,4 @@
+
 import { pool } from "./database";
 
 type JobItem = {
@@ -22,200 +23,194 @@ type SourceSettings = {
   field_map?: Record<string, string>;
 };
 
-function cleanText(value: unknown): string | null {
-  if (value === null || value === undefined) return null;
+function cleanText(value: unknown): string {
+  if (typeof value !== "string") return "";
 
-  return String(value)
+  return value
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
     .replace(/<[^>]*>/g, " ")
-    .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
+    .replace(/&#39;|&apos;/g, "'")
     .replace(/\s+/g, " ")
-    .trim() || null;
+    .trim();
 }
 
 function getXmlValue(
   block: string,
-  names: string[]
+  tag: string
 ): string | null {
-  for (const name of names) {
-    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const escapedTag = tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-    const pattern = new RegExp(
-      `<${escaped}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${escaped}\\s*>`,
+  const match = block.match(
+    new RegExp(
+      `<${escapedTag}\\b[^>]*>([\\s\\S]*?)<\\/${escapedTag}>`,
       "i"
-    );
+    )
+  );
 
-    const match = block.match(pattern);
-
-    if (match) {
-      const value = cleanText(match[1]);
-      if (value) return value;
-    }
-  }
-
-  return null;
+  return match ? cleanText(match[1]) : null;
 }
 
 function getXmlLink(block: string): string | null {
-  const linkTag = block.match(/<link\b([^>]*)\/?>/i);
+  const atomLink = block.match(
+    /<link\b[^>]*\bhref=["']([^"']+)["'][^>]*\/?>/i
+  );
 
-  if (linkTag) {
-    const href = linkTag[1].match(
-      /\bhref=["']([^"']+)["']/i
-    );
+  if (atomLink) return cleanText(atomLink[1]);
 
-    if (href) return href[1];
+  const rssLink = block.match(
+    /<link\b[^>]*>([\s\S]*?)<\/link>/i
+  );
 
-    const text = linkTag[0].match(
-      /<link\b[^>]*>([\s\S]*?)<\/link>/i
-    );
-
-    if (text) return cleanText(text[1]);
-  }
+  if (rssLink) return cleanText(rssLink[1]);
 
   return null;
 }
 
-function parseXmlFeed(xml: string): JobItem[] {
-  const blocks = [
-    ...xml.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi),
-    ...xml.matchAll(/<entry\b[^>]*>([\s\S]*?)<\/entry>/gi)
-  ];
+function parseDate(value: string | null): Date | null {
+  if (!value) return null;
+
+  const date = new Date(value);
+
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function parseXmlFeed(
+  xml: string,
+  sourceName: string,
+  country: string
+): JobItem[] {
+  const blocks = xml.match(
+    /<(item|entry)\b[^>]*>[\s\S]*?<\/\1>/gi
+  ) || [];
 
   const jobs: JobItem[] = [];
 
-  for (const match of blocks) {
-    const block = match[1];
-
-    const title = getXmlValue(block, ["title"]);
+  for (const block of blocks) {
+    const title = getXmlValue(block, "title");
     const link = getXmlLink(block);
 
     if (!title || !link) continue;
 
-    const guid =
-      getXmlValue(block, ["guid", "id"]) || link;
-
-    const rawDate = getXmlValue(
-      block,
-      ["pubDate", "published", "updated", "date"]
-    );
-
-    const parsedDate = rawDate
-      ? new Date(rawDate)
-      : null;
+    const externalId =
+      getXmlValue(block, "guid") ||
+      getXmlValue(block, "id") ||
+      link;
 
     jobs.push({
       title,
-      employer: getXmlValue(
-        block,
-        ["author", "dc:creator", "company", "employer"]
-      ),
-      location: getXmlValue(
-        block,
-        ["location", "job:location"]
-      ),
-      country: "Pakistan",
-      description: getXmlValue(
-        block,
-        ["content:encoded", "description", "summary", "content"]
-      ),
+      employer: sourceName,
+      location: null,
+      country,
+      description:
+        getXmlValue(block, "description") ||
+        getXmlValue(block, "summary") ||
+        getXmlValue(block, "content"),
       qualification: null,
       experience: null,
       salary_information: null,
       official_apply_url: link,
       deadline: null,
-      external_id: guid.slice(0, 500)
+      external_id: externalId
     });
   }
 
   return jobs;
 }
 
-function getJsonPath(
+function getJsonField(
   item: Record<string, unknown>,
-  path: string
-): unknown {
-  return path.split(".").reduce<unknown>((value, key) => {
-    if (
-      value &&
-      typeof value === "object" &&
-      key in value
-    ) {
-      return (value as Record<string, unknown>)[key];
-    }
+  field: string | undefined
+): string | null {
+  if (!field) return null;
 
-    return undefined;
-  }, item);
+  const value = item[field];
+
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value).trim() || null;
+  }
+
+  return null;
 }
 
 function parseJsonFeed(
-  data: unknown,
-  settings: SourceSettings
+  json: unknown,
+  sourceName: string,
+  country: string,
+  fieldMap: Record<string, string> = {}
 ): JobItem[] {
-  if (!data || typeof data !== "object") return [];
+  if (!json || typeof json !== "object") return [];
 
-  const object = data as Record<string, unknown>;
+  const data = json as Record<string, unknown>;
 
-  const items = Array.isArray(object.items)
-    ? object.items
-    : Array.isArray(object.jobs)
-      ? object.jobs
+  const items = Array.isArray(data.items)
+    ? data.items
+    : Array.isArray(data.jobs)
+      ? data.jobs
       : [];
-
-  const map = settings.field_map || {};
-
-  function field(
-    item: Record<string, unknown>,
-    key: string,
-    fallback: string
-  ): string | null {
-    const path = map[key] || fallback;
-    return cleanText(getJsonPath(item, path));
-  }
 
   const jobs: JobItem[] = [];
 
-  for (const raw of items) {
-    if (!raw || typeof raw !== "object") continue;
+  for (const rawItem of items) {
+    if (!rawItem || typeof rawItem !== "object") continue;
 
-    const item = raw as Record<string, unknown>;
+    const item = rawItem as Record<string, unknown>;
 
-    const title = field(item, "title", "title");
-    const link = field(item, "url", "url") ||
-      field(item, "url", "link");
+    const title = getJsonField(
+      item,
+      fieldMap.title || "title"
+    );
+
+    const link = getJsonField(
+      item,
+      fieldMap.link || "url"
+    );
 
     if (!title || !link) continue;
 
-    const dateText = field(item, "deadline", "deadline");
-    const parsedDate = dateText
-      ? new Date(dateText)
-      : null;
+    const externalId =
+      getJsonField(item, fieldMap.external_id || "id") ||
+      link;
+
+    const deadlineText = getJsonField(
+      item,
+      fieldMap.deadline || "deadline"
+    );
 
     jobs.push({
       title,
-      employer: field(item, "employer", "employer"),
-      location: field(item, "location", "location"),
-      country: settings.country || "Pakistan",
-      description: field(item, "description", "description"),
-      qualification: field(item, "qualification", "qualification"),
-      experience: field(item, "experience", "experience"),
-      salary_information: field(
+      employer:
+        getJsonField(item, fieldMap.employer || "employer") ||
+        sourceName,
+      location: getJsonField(
         item,
-        "salary_information",
-        "salary"
+        fieldMap.location || "location"
+      ),
+      country:
+        getJsonField(item, fieldMap.country || "country") ||
+        country,
+      description: getJsonField(
+        item,
+        fieldMap.description || "description"
+      ),
+      qualification: getJsonField(
+        item,
+        fieldMap.qualification || "qualification"
+      ),
+      experience: getJsonField(
+        item,
+        fieldMap.experience || "experience"
+      ),
+      salary_information: getJsonField(
+        item,
+        fieldMap.salary_information || "salary"
       ),
       official_apply_url: link,
-      deadline:
-        parsedDate && !Number.isNaN(parsedDate.getTime())
-          ? parsedDate
-          : null,
-      external_id:
-        field(item, "id", "id") || link
+      deadline: parseDate(deadlineText),
+      external_id: externalId
     });
   }
 
@@ -242,14 +237,14 @@ function validateFeedUrl(
   }
 }
 
-function validateJobUrl(value: string): boolean {
+function validateJobUrl(url: string): boolean {
   try {
-    const url = new URL(value);
+    const parsed = new URL(url);
 
     return (
-      url.protocol === "https:" &&
-      !url.username &&
-      !url.password
+      parsed.protocol === "https:" &&
+      !parsed.username &&
+      !parsed.password
     );
   } catch {
     return false;
@@ -267,11 +262,11 @@ async function saveJob(
     await client.query("BEGIN");
 
     await client.query(
-      "SELECT pg_advisory_xact_lock(0, hashtext($1))",
-      [String(sourceId)]
+      "SELECT pg_advisory_xact_lock($1::bigint)",
+      [sourceId]
     );
 
-    const duplicate = await client.query(
+    const existing = await client.query(
       `SELECT id
        FROM jobs
        WHERE source_id = $1
@@ -280,7 +275,7 @@ async function saveJob(
       [sourceId, job.external_id]
     );
 
-    if (duplicate.rows.length > 0) {
+    if (existing.rows.length > 0) {
       await client.query("COMMIT");
       return false;
     }
@@ -301,13 +296,12 @@ async function saveJob(
         official_apply_url,
         deadline,
         status,
-        collected_at,
-        created_at,
-        updated_at
+        collected_at
       )
       VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-        $11,$12,$13,'pending',NOW(),NOW(),NOW()
+        $1, $2, $3, $4, $5, $6, $7,
+        $8, $9, $10, $11, $12, $13,
+        'pending', NOW()
       )`,
       [
         sourceId,
@@ -327,6 +321,7 @@ async function saveJob(
     );
 
     await client.query("COMMIT");
+
     return true;
   } catch (error) {
     await client.query("ROLLBACK");
@@ -337,6 +332,19 @@ async function saveJob(
 }
 
 export async function collectJobs() {
+  const result = await pool.query(
+    `SELECT
+       id,
+       name,
+       website_url,
+       source_type,
+       is_active,
+       fetch_settings
+     FROM job_sources
+     WHERE is_active = true
+     ORDER BY id`
+  );
+
   const summary = {
     sources_checked: 0,
     jobs_found: 0,
@@ -345,53 +353,57 @@ export async function collectJobs() {
     errors: 0
   };
 
-  const sources = await pool.query(
-    `SELECT
-       id,
-       name,
-       website_url,
-       source_type,
-       fetch_settings
-     FROM job_sources
-     WHERE is_active = TRUE
-     ORDER BY id`
-  );
-
-  for (const source of sources.rows) {
+  for (const source of result.rows) {
     summary.sources_checked++;
 
     try {
-      const settings =
-        (source.fetch_settings || {}) as SourceSettings;
+      const settings = (
+        source.fetch_settings || {}
+      ) as SourceSettings;
 
       const feedUrl = settings.feed_url;
       const format = (
-        settings.format || source.source_type
+        settings.format || source.source_type || ""
       ).toLowerCase();
 
       if (
         !feedUrl ||
         !validateFeedUrl(feedUrl, source.website_url)
       ) {
-        throw new Error("Invalid or unconfigured feed URL");
+        throw new Error("Invalid or unapproved feed URL");
       }
 
       if (!["rss", "atom", "json"].includes(format)) {
         throw new Error("Unsupported feed format");
       }
 
-      const response = await fetch(feedUrl, {
-        method: "GET",
-        redirect: "error",
-        signal: AbortSignal.timeout(15000),
-        headers: {
-          Accept:
-            "application/rss+xml, application/atom+xml, application/xml, application/json"
-        }
-      });
+      const controller = new AbortController();
+
+      const timeout = setTimeout(
+        () => controller.abort(),
+        15000
+      );
+
+      let response: Response;
+
+      try {
+        response = await fetch(feedUrl, {
+          method: "GET",
+          redirect: "error",
+          signal: controller.signal,
+          headers: {
+            Accept:
+              "application/rss+xml, application/atom+xml, application/json, text/xml"
+          }
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
 
       if (!response.ok) {
-        throw new Error(`Feed returned HTTP ${response.status}`);
+        throw new Error(
+          `Feed request failed: HTTP ${response.status}`
+        );
       }
 
       const contentLength = Number(
@@ -399,44 +411,53 @@ export async function collectJobs() {
       );
 
       if (contentLength > 1_000_000) {
-        throw new Error("Feed is too large");
+        throw new Error("Feed exceeds 1 MB limit");
       }
 
       const body = await response.text();
 
-      if (body.length > 1_000_000) {
-        throw new Error("Feed is too large");
+      if (new TextEncoder().encode(body).length > 1_000_000) {
+        throw new Error("Feed exceeds 1 MB limit");
       }
 
-      const foundJobs = format === "json"
-        ? parseJsonFeed(JSON.parse(body), settings)
-        : parseXmlFeed(body);
+      let jobs: JobItem[];
 
-      summary.jobs_found += foundJobs.length;
+      if (format === "json") {
+        let parsed: unknown;
 
-      const categoryId = Number(settings.category_id);
+        try {
+          parsed = JSON.parse(body);
+        } catch {
+          throw new Error("Invalid JSON feed");
+        }
 
-      const validCategory = Number.isSafeInteger(categoryId) &&
-        categoryId > 0
-        ? categoryId
-        : null;
+        jobs = parseJsonFeed(
+          parsed,
+          source.name,
+          settings.country || "Pakistan",
+          settings.field_map
+        );
+      } else {
+        jobs = parseXmlFeed(
+          body,
+          source.name,
+          settings.country || "Pakistan"
+        );
+      }
 
-      for (const job of foundJobs) {
-        if (
-          !job.title ||
-          !job.official_apply_url ||
-          !validateJobUrl(job.official_apply_url)
-        ) {
+      summary.jobs_found += jobs.length;
+
+      for (const job of jobs) {
+        if (!job.title || !job.external_id) continue;
+
+        if (!validateJobUrl(job.official_apply_url)) {
+          summary.errors++;
           continue;
         }
 
-        job.external_id = job.external_id.trim().slice(0, 500);
-
-        if (!job.external_id) continue;
-
         const added = await saveJob(
           Number(source.id),
-          validCategory,
+          settings.category_id ?? null,
           job
         );
 
@@ -451,7 +472,7 @@ export async function collectJobs() {
 
       console.error(
         `Job collection failed for source ${source.name}:`,
-        error instanceof Error ? error.message : "Unknown error"
+        error instanceof Error ? error.message : error
       );
     }
   }
@@ -461,5 +482,4 @@ export async function collectJobs() {
     message: "Job collection completed",
     summary
   };
-    }
-      
+}
