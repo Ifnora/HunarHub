@@ -31,6 +31,9 @@ class HunarHubApp extends StatelessWidget {
   }
 }
 
+
+
+
 class AppHome extends StatefulWidget {
   const AppHome({super.key});
 
@@ -40,6 +43,7 @@ class AppHome extends StatefulWidget {
 
 class _AppHomeState extends State<AppHome> {
   String? _token;
+  String? _role;
   String? _selectedFeature;
 
   void openFeature(String feature) {
@@ -50,9 +54,10 @@ class _AppHomeState extends State<AppHome> {
         context,
         MaterialPageRoute(
           builder: (_) => LoginScreen(
-            onLoginSuccess: (token) {
+            onLoginSuccess: (token, role) {
               setState(() {
                 _token = token;
+                _role = role;
               });
 
               Navigator.pop(context);
@@ -68,6 +73,7 @@ class _AppHomeState extends State<AppHome> {
   void logout() {
     setState(() {
       _token = null;
+      _role = null;
       _selectedFeature = null;
     });
   }
@@ -105,6 +111,17 @@ class _AppHomeState extends State<AppHome> {
       case 'preparation':
         return FeatureScreen(
           title: 'Interview & Test Preparation',
+          onLogout: logout,
+          onHome: () => setState(() => _selectedFeature = null),
+        );
+
+      case 'admin':
+        if (_role != 'admin') {
+          return HomeScreen(onFeatureSelected: openFeature);
+        }
+
+        return AdminJobsScreen(
+          apiService: apiService,
           onLogout: logout,
           onHome: () => setState(() => _selectedFeature = null),
         );
