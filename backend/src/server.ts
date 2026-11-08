@@ -9,6 +9,7 @@ import profileRouter from "./routes/profile";
 import cvRouter from "./routes/cv";
 import applicationsRouter from "./routes/applications";
 import adminRouter from "./routes/admin";
+import collectorRouter from "./routes/collector";
 
 dotenv.config();
 
@@ -29,6 +30,9 @@ app.use("/cv", cvRouter);
 
 // SAVED JOBS AND APPLICATION TRACKING
 app.use("/applications", applicationsRouter);
+
+// AUTOMATIC JOB COLLECTOR
+app.use("/admin/collector", collectorRouter);
 
 // ADMIN JOB MANAGEMENT ROUTES
 app.use("/admin", adminRouter);
