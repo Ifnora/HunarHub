@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'api_service.dart';
 import 'login_screen.dart';
 import 'admin_jobs_screen.dart';
+
 void main() {
   runApp(const HunarHubApp());
 }
@@ -31,8 +32,7 @@ class HunarHubApp extends StatelessWidget {
   }
 }
 
-
-
+// APP HOME AND NAVIGATION
 
 class AppHome extends StatefulWidget {
   const AppHome({super.key});
@@ -57,7 +57,7 @@ class _AppHomeState extends State<AppHome> {
             onLoginSuccess: (token, role) {
               setState(() {
                 _token = token;
-                _role = role;
+                _role = role.toLowerCase();
               });
 
               Navigator.pop(context);
@@ -78,10 +78,19 @@ class _AppHomeState extends State<AppHome> {
     });
   }
 
+  void goHome() {
+    setState(() {
+      _selectedFeature = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_token == null || _selectedFeature == null) {
-      return HomeScreen(onFeatureSelected: openFeature);
+      return HomeScreen(
+        onFeatureSelected: openFeature,
+        showAdminDashboard: _role == 'admin',
+      );
     }
 
     final apiService = ApiService(token: _token!);
@@ -91,43 +100,49 @@ class _AppHomeState extends State<AppHome> {
         return JobsScreen(
           apiService: apiService,
           onLogout: logout,
-          onHome: () => setState(() => _selectedFeature = null),
+          onHome: goHome,
         );
 
       case 'cv':
         return CVBuilderScreen(
           apiService: apiService,
           onLogout: logout,
-          onHome: () => setState(() => _selectedFeature = null),
+          onHome: goHome,
         );
 
       case 'profile':
         return ProfileScreen(
           apiService: apiService,
           onLogout: logout,
-          onHome: () => setState(() => _selectedFeature = null),
+          onHome: goHome,
         );
 
       case 'preparation':
         return FeatureScreen(
           title: 'Interview & Test Preparation',
           onLogout: logout,
-          onHome: () => setState(() => _selectedFeature = null),
+          onHome: goHome,
         );
 
       case 'admin':
         if (_role != 'admin') {
-          return HomeScreen(onFeatureSelected: openFeature);
+          return HomeScreen(
+            onFeatureSelected: openFeature,
+            showAdminDashboard: false,
+          );
         }
 
         return AdminJobsScreen(
           apiService: apiService,
           onLogout: logout,
-          onHome: () => setState(() => _selectedFeature = null),
+          onHome: goHome,
         );
 
       default:
-        return HomeScreen(onFeatureSelected: openFeature);
+        return HomeScreen(
+          onFeatureSelected: openFeature,
+          showAdminDashboard: _role == 'admin',
+        );
     }
   }
 }
@@ -136,10 +151,12 @@ class _AppHomeState extends State<AppHome> {
 
 class HomeScreen extends StatelessWidget {
   final Function(String) onFeatureSelected;
+  final bool showAdminDashboard;
 
   const HomeScreen({
     super.key,
     required this.onFeatureSelected,
+    this.showAdminDashboard = false,
   });
 
   @override
@@ -203,6 +220,16 @@ class HomeScreen extends StatelessWidget {
               color: Colors.purple,
               onTap: () => onFeatureSelected('profile'),
             ),
+
+            if (showAdminDashboard)
+              featureCard(
+                context,
+                icon: Icons.admin_panel_settings_outlined,
+                title: 'Admin Dashboard',
+                description: 'Review, approve and publish job listings.',
+                color: Colors.teal,
+                onTap: () => onFeatureSelected('admin'),
+              ),
           ],
         ),
       ),
@@ -294,6 +321,7 @@ class _JobsScreenState extends State<JobsScreen> {
 
     try {
       final result = await widget.apiService.getJobs();
+
       if (!mounted) return;
 
       setState(() {
@@ -321,6 +349,7 @@ class _JobsScreenState extends State<JobsScreen> {
   Future<void> saveJob(String id) async {
     try {
       final result = await widget.apiService.saveJob(id);
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -342,6 +371,7 @@ class _JobsScreenState extends State<JobsScreen> {
   Future<void> applyJob(String id) async {
     try {
       final result = await widget.apiService.applyForJob(id);
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -891,12 +921,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(height: 24),
                   field('City', _cityController),
                   field('Country', _countryController),
-                  field('Education (comma separated)',
-                      _educationController),
-                  field('Skills (comma separated)',
-                      _skillsController),
-                  field('Experience (comma separated)',
-                      _experienceController),
+                  field(
+                    'Education (comma separated)',
+                    _educationController,
+                  ),
+                  field(
+                    'Skills (comma separated)',
+                    _skillsController,
+                  ),
+                  field(
+                    'Experience (comma separated)',
+                    _experienceController,
+                  ),
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
@@ -1103,8 +1139,6 @@ class _CVBuilderScreenState extends State<CVBuilderScreen> {
     });
 
     showMessage('CV loaded for editing.');
-
-    // Move the user back to the top of the form.
   }
 
   Future<void> saveCV() async {
