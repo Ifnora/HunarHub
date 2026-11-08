@@ -1,5 +1,6 @@
 
 import { pool } from "./database";
+import { load } from "cheerio";
 
 type JobItem = {
   title: string;
@@ -15,12 +16,28 @@ type JobItem = {
   external_id: string;
 };
 
+type HtmlSelectors = {
+  item?: string;
+  title?: string;
+  link?: string;
+  description?: string;
+  employer?: string;
+  location?: string;
+  deadline?: string;
+  external_id?: string;
+  external_id_attribute?: string;
+  qualification?: string;
+  experience?: string;
+  salary_information?: string;
+};
+
 type SourceSettings = {
   feed_url?: string;
   format?: string;
   category_id?: number;
   country?: string;
   field_map?: Record<string, string>;
+  selectors?: HtmlSelectors;
 };
 
 function cleanText(value: unknown): string {
@@ -217,6 +234,85 @@ function parseJsonFeed(
   return jobs;
 }
 
+function parseHtmlPage(
+  html: string,
+  sourceName: string,
+  country: string,
+  baseUrl: string,
+  selectors: HtmlSelectors
+): JobItem[] {
+  if (
+    !selectors.item ||
+    !selectors.title ||
+    !selectors.link
+  ) {
+    throw new Error(
+      "HTML source requires item, title and link selectors"
+    );
+  }
+
+  const $ = load(html);
+  const jobs: JobItem[] = [];
+
+  $(selectors.item).each((_index, element) => {
+    const item = $(element);
+
+    const title = cleanText(
+      item.find(selectors.title!).first().text()
+    );
+
+    const linkElement = item.find(selectors.link!).first();
+    const rawLink = linkElement.attr("href");
+
+    if (!title || !rawLink) return;
+
+    let applyUrl: string;
+
+    try {
+      applyUrl = new URL(rawLink, baseUrl).toString();
+    } catch {
+      return;
+    }
+
+    if (!validateJobUrl(applyUrl)) return;
+
+    const getText = (selector?: string): string | null => {
+      if (!selector) return null;
+
+      const value = cleanText(
+        item.find(selector).first().text()
+      );
+
+      return value || null;
+    };
+
+    const externalId =
+      getText(selectors.external_id) ||
+      (
+        selectors.external_id_attribute
+          ? item.attr(selectors.external_id_attribute) || null
+          : null
+      ) ||
+      applyUrl;
+
+    jobs.push({
+      title,
+      employer: getText(selectors.employer) || sourceName,
+      location: getText(selectors.location),
+      country,
+      description: getText(selectors.description),
+      qualification: getText(selectors.qualification),
+      experience: getText(selectors.experience),
+      salary_information: getText(selectors.salary_information),
+      official_apply_url: applyUrl,
+      deadline: parseDate(getText(selectors.deadline)),
+      external_id: externalId
+    });
+  });
+
+  return jobs;
+}
+
 function validateFeedUrl(
   feedUrl: string,
   websiteUrl: string
@@ -362,6 +458,7 @@ export async function collectJobs() {
       ) as SourceSettings;
 
       const feedUrl = settings.feed_url;
+
       const format = (
         settings.format || source.source_type || ""
       ).toLowerCase();
@@ -370,11 +467,11 @@ export async function collectJobs() {
         !feedUrl ||
         !validateFeedUrl(feedUrl, source.website_url)
       ) {
-        throw new Error("Invalid or unapproved feed URL");
+        throw new Error("Invalid or unapproved source URL");
       }
 
-      if (!["rss", "atom", "json"].includes(format)) {
-        throw new Error("Unsupported feed format");
+      if (!["rss", "atom", "json", "html"].includes(format)) {
+        throw new Error("Unsupported source format");
       }
 
       const controller = new AbortController();
@@ -384,40 +481,42 @@ export async function collectJobs() {
         15000
       );
 
-      let response: Response;
+      let body: string;
 
       try {
-        response = await fetch(feedUrl, {
+        const response = await fetch(feedUrl, {
           method: "GET",
           redirect: "error",
           signal: controller.signal,
           headers: {
             Accept:
-              "application/rss+xml, application/atom+xml, application/json, text/xml"
+              "text/html, application/rss+xml, application/atom+xml, application/json, text/xml"
           }
         });
+
+        if (!response.ok) {
+          throw new Error(
+            `Source request failed: HTTP ${response.status}`
+          );
+        }
+
+        const contentLength = Number(
+          response.headers.get("content-length") || 0
+        );
+
+        if (contentLength > 1_000_000) {
+          throw new Error("Source exceeds 1 MB limit");
+        }
+
+        body = await response.text();
       } finally {
         clearTimeout(timeout);
       }
 
-      if (!response.ok) {
-        throw new Error(
-          `Feed request failed: HTTP ${response.status}`
-        );
-      }
-
-      const contentLength = Number(
-        response.headers.get("content-length") || 0
-      );
-
-      if (contentLength > 1_000_000) {
-        throw new Error("Feed exceeds 1 MB limit");
-      }
-
-      const body = await response.text();
-
-      if (new TextEncoder().encode(body).length > 1_000_000) {
-        throw new Error("Feed exceeds 1 MB limit");
+      if (
+        new TextEncoder().encode(body).length > 1_000_000
+      ) {
+        throw new Error("Source exceeds 1 MB limit");
       }
 
       let jobs: JobItem[];
@@ -428,7 +527,7 @@ export async function collectJobs() {
         try {
           parsed = JSON.parse(body);
         } catch {
-          throw new Error("Invalid JSON feed");
+          throw new Error("Invalid JSON source");
         }
 
         jobs = parseJsonFeed(
@@ -436,6 +535,14 @@ export async function collectJobs() {
           source.name,
           settings.country || "Pakistan",
           settings.field_map
+        );
+      } else if (format === "html") {
+        jobs = parseHtmlPage(
+          body,
+          source.name,
+          settings.country || "Pakistan",
+          feedUrl,
+          settings.selectors || {}
         );
       } else {
         jobs = parseXmlFeed(
