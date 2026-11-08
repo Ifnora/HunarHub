@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'api_service.dart';
 
 class LoginScreen extends StatefulWidget {
-  final void Function(String token) onLogin;
+  final void Function(String token, String role) onLoginSuccess;
 
   const LoginScreen({
     super.key,
-    required this.onLogin,
+    required this.onLoginSuccess,
   });
 
   @override
@@ -44,13 +44,21 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       final token = result['token'];
+      final user = result['user'];
 
       if (token is! String || token.isEmpty) {
         throw Exception('Login token was not received.');
       }
 
+      if (user is! Map || user['role'] is! String) {
+        throw Exception('User role was not received. Please try again.');
+      }
+
+      final role = user['role'].toString().toLowerCase();
+
       if (!mounted) return;
-      widget.onLogin(token);
+
+      widget.onLoginSuccess(token, role);
     } catch (error) {
       if (!mounted) return;
 
