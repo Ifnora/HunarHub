@@ -1,6 +1,5 @@
 
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -53,7 +52,7 @@ class _ProfessionalCVBuilderScreenState
   String? photoBase64;
   String? editingId;
 
-  bool loading = false;
+  bool loading = true;
   bool saving = false;
 
   List<dynamic> savedCVs = [];
@@ -63,8 +62,10 @@ class _ProfessionalCVBuilderScreenState
   @override
   void initState() {
     super.initState();
-    _addExperience();
-    _addEducation();
+
+    experiences.add(_CVEntry.experience());
+    education.add(_CVEntry.education());
+
     _loadCVs();
   }
 
@@ -108,23 +109,23 @@ class _ProfessionalCVBuilderScreenState
   }
 
   Future<void> _loadCVs() async {
-    setState(() => loading = true);
+    if (mounted) {
+      setState(() => loading = true);
+    }
 
     try {
-      final response = await widget.apiService.getCVs();
+      // ApiService.getCVs() returns Map<String, dynamic>.
+      final Map<String, dynamic> response =
+          await widget.apiService.getCVs();
 
       List<dynamic> items = [];
 
-      if (response is List) {
-        items = response;
-      } else if (response is Map) {
-        final data = response['data'] ?? response['cvs'];
+      final data = response['data'] ?? response['cvs'];
 
-        if (data is List) {
-          items = data;
-        } else if (data is Map && data['cvs'] is List) {
-          items = data['cvs'];
-        }
+      if (data is List) {
+        items = data;
+      } else if (data is Map && data['cvs'] is List) {
+        items = data['cvs'] as List;
       }
 
       if (mounted) {
@@ -161,11 +162,25 @@ class _ProfessionalCVBuilderScreenState
         return;
       }
 
+      if (!mounted) return;
+
       setState(() {
         photoBase64 = base64Encode(bytes);
       });
     } catch (e) {
       _showMessage('Unable to select photo.');
+    }
+  }
+
+  ImageProvider? _getProfileImage() {
+    if (photoBase64 == null || photoBase64!.isEmpty) {
+      return null;
+    }
+
+    try {
+      return MemoryImage(base64Decode(photoBase64!));
+    } catch (_) {
+      return null;
     }
   }
 
@@ -194,12 +209,12 @@ class _ProfessionalCVBuilderScreenState
 
   Future<void> _saveCV() async {
     if (!_formKey.currentState!.validate()) return;
+    if (saving) return;
 
     setState(() => saving = true);
 
     try {
       final content = _makeContent();
-
       final title = titleController.text.trim();
 
       if (editingId == null) {
@@ -275,7 +290,16 @@ class _ProfessionalCVBuilderScreenState
 
     photoBase64 = data['photo_base64']?.toString();
 
-    cvType = cv['cv_type']?.toString() ?? 'experienced';
+    final savedType = cv['cv_type']?.toString() ?? 'experienced';
+
+    const validTypes = [
+      'fresh_graduate',
+      'experienced',
+      'banking',
+    ];
+
+    cvType = validTypes.contains(savedType) ? savedType : 'experienced';
+
     editingId = cv['id']?.toString();
 
     final exp = data['experiences'];
@@ -306,34 +330,43 @@ class _ProfessionalCVBuilderScreenState
       }
     }
 
-    if (experiences.isEmpty) _addExperience();
-    if (education.isEmpty) _addEducation();
+    if (experiences.isEmpty) {
+      experiences.add(_CVEntry.experience());
+    }
+
+    if (education.isEmpty) {
+      education.add(_CVEntry.education());
+    }
 
     setState(() {});
 
     _showMessage('CV loaded for editing.');
 
-    Scrollable.ensureVisible(
-      _formKey.currentContext ?? context,
-      duration: const Duration(milliseconds: 300),
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Scrollable.ensureVisible(
+          _formKey.currentContext ?? context,
+          duration: const Duration(milliseconds: 300),
+        );
+      }
+    });
   }
 
   Future<void> _deleteCV(String id) async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Delete CV?'),
         content: const Text(
           'Are you sure you want to delete this CV?',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(dialogContext, true),
             child: const Text('Delete'),
           ),
         ],
@@ -344,6 +377,9 @@ class _ProfessionalCVBuilderScreenState
 
     try {
       await widget.apiService.deleteCV(id);
+
+      if (!mounted) return;
+
       _showMessage('CV deleted.');
       await _loadCVs();
     } catch (e) {
@@ -376,7 +412,7 @@ class _ProfessionalCVBuilderScreenState
 
     pw.MemoryImage? profileImage;
 
-    if (photoBase64 != null) {
+    if (photoBase64 != null && photoBase64!.isNotEmpty) {
       try {
         profileImage = pw.MemoryImage(
           base64Decode(photoBase64!),
@@ -687,8 +723,8 @@ class _ProfessionalCVBuilderScreenState
     photoBase64 = null;
     editingId = null;
 
-    _addExperience();
-    _addEducation();
+    experiences.add(_CVEntry.experience());
+    education.add(_CVEntry.education());
 
     setState(() {});
   }
@@ -810,7 +846,10 @@ class _ProfessionalCVBuilderScreenState
       child: ListTile(
         leading: const CircleAvatar(
           backgroundColor: Color(0xFFE0F2F1),
-          child: Icon(Icons.description, color: primaryColor),
+          child: Icon(
+            Icons.description,
+            color: primaryColor,
+          ),
         ),
         title: Text(cv['title']?.toString() ?? 'Untitled CV'),
         subtitle: Text(
@@ -820,7 +859,7 @@ class _ProfessionalCVBuilderScreenState
           onSelected: (value) {
             if (value == 'edit') {
               _loadForEditing(cv);
-            } else if (value == 'delete') {
+            } else if (value == 'delete' && id.isNotEmpty) {
               _deleteCV(id);
             }
           },
@@ -923,12 +962,8 @@ class _ProfessionalCVBuilderScreenState
                         CircleAvatar(
                           radius: 48,
                           backgroundColor: Colors.grey.shade200,
-                          backgroundImage: photoBase64 == null
-                              ? null
-                              : MemoryImage(
-                                  base64Decode(photoBase64!),
-                                ),
-                          child: photoBase64 == null
+                          backgroundImage: _getProfileImage(),
+                          child: _getProfileImage() == null
                               ? const Icon(
                                   Icons.person,
                                   size: 48,
@@ -1048,10 +1083,7 @@ class _ProfessionalCVBuilderScreenState
                     label: const Text('Add Another Qualification'),
                   ),
 
-                  _sectionTitle(
-                    'Languages',
-                    Icons.language,
-                  ),
+                  _sectionTitle('Languages', Icons.language),
 
                   _field(
                     'Languages',
