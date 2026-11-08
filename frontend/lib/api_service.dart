@@ -194,6 +194,95 @@ class ApiService {
     return _handleResponse(response);
   }
 
+  // ==============================
+  // ADMIN JOB MANAGEMENT
+  // ==============================
+
+  // GET JOBS FOR ADMIN REVIEW
+  Future<Map<String, dynamic>> getAdminJobs({
+    String? status,
+  }) async {
+    final uri = Uri.parse('$baseUrl/admin/jobs').replace(
+      queryParameters: {
+        if (status != null) 'status': status,
+      },
+    );
+
+    final response = await http.get(uri, headers: _headers);
+    return _handleResponse(response);
+  }
+
+  // CREATE JOB FOR REVIEW
+  Future<Map<String, dynamic>> createAdminJob({
+    required String title,
+    required String employer,
+    required String description,
+    required String officialApplyUrl,
+    required int categoryId,
+    String? location,
+    String country = 'Pakistan',
+    String? qualification,
+    String? experience,
+    String? salaryInformation,
+    String? deadline,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/admin/jobs'),
+      headers: _headers,
+      body: jsonEncode({
+        'title': title,
+        'employer': employer,
+        'description': description,
+        'official_apply_url': officialApplyUrl,
+        'category_id': categoryId,
+        'location': location,
+        'country': country,
+        'qualification': qualification,
+        'experience': experience,
+        'salary_information': salaryInformation,
+        'deadline': deadline,
+      }),
+    );
+
+    return _handleResponse(response);
+  }
+
+  // APPROVE JOB
+  Future<Map<String, dynamic>> approveAdminJob(
+    String jobId,
+  ) async {
+    final response = await http.patch(
+      Uri.parse('$baseUrl/admin/jobs/$jobId/approve'),
+      headers: _headers,
+    );
+
+    return _handleResponse(response);
+  }
+
+  // PUBLISH APPROVED JOB
+  Future<Map<String, dynamic>> publishAdminJob(
+    String jobId,
+  ) async {
+    final response = await http.patch(
+      Uri.parse('$baseUrl/admin/jobs/$jobId/publish'),
+      headers: _headers,
+    );
+
+    return _handleResponse(response);
+  }
+
+  // REJECT JOB
+  Future<Map<String, dynamic>> rejectAdminJob(
+    String jobId,
+  ) async {
+    final response = await http.patch(
+      Uri.parse('$baseUrl/admin/jobs/$jobId/reject'),
+      headers: _headers,
+    );
+
+    return _handleResponse(response);
+  }
+
   // HANDLE API RESPONSES
   static Map<String, dynamic> _handleResponse(
     http.Response response,
