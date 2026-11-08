@@ -20,6 +20,7 @@ class AdminJobsScreen extends StatefulWidget {
 class _AdminJobsScreenState extends State<AdminJobsScreen> {
   bool _loading = false;
   bool _submitting = false;
+  bool _collecting = false;
   bool _showCreateForm = false;
 
   String _selectedStatus = 'all';
@@ -108,6 +109,8 @@ class _AdminJobsScreenState extends State<AdminJobsScreen> {
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
+
     setState(() {
       _loading = true;
       _error = null;
@@ -148,6 +151,46 @@ class _AdminJobsScreenState extends State<AdminJobsScreen> {
     } finally {
       if (mounted) {
         setState(() => _loading = false);
+      }
+    }
+  }
+
+  // AUTOMATIC JOB COLLECTION
+  Future<void> _runJobCollector() async {
+    if (_collecting) return;
+
+    setState(() => _collecting = true);
+
+    try {
+      final response =
+          await widget.apiService.runJobCollector();
+
+      final summary = response['summary'];
+
+      if (summary is Map) {
+        final sources = summary['sources_checked'] ?? 0;
+        final found = summary['jobs_found'] ?? 0;
+        final added = summary['jobs_added'] ?? 0;
+        final duplicates = summary['duplicates'] ?? 0;
+        final errors = summary['errors'] ?? 0;
+
+        _showMessage(
+          'Collection complete: $sources sources checked, '
+          '$found jobs found, $added added, '
+          '$duplicates duplicates, $errors errors.',
+        );
+      } else {
+        _showMessage('Job collection completed.');
+      }
+
+      await _loadData();
+    } catch (e) {
+      _showMessage(
+        e.toString().replaceFirst('Exception: ', ''),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _collecting = false);
       }
     }
   }
@@ -300,6 +343,7 @@ class _AdminJobsScreenState extends State<AdminJobsScreen> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
+
               const SizedBox(height: 16),
 
               _buildTextField(
@@ -425,9 +469,13 @@ class _AdminJobsScreenState extends State<AdminJobsScreen> {
                 fontWeight: FontWeight.bold,
               ),
             ),
+
             const SizedBox(height: 5),
+
             Text(employer),
+
             if (location.isNotEmpty) Text(location),
+
             const SizedBox(height: 8),
 
             Chip(
@@ -509,24 +557,47 @@ class _AdminJobsScreenState extends State<AdminJobsScreen> {
           ),
         ],
       ),
+
       body: RefreshIndicator(
         onRefresh: _loadData,
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            const Text(
+              'Job Management',
+              style: TextStyle(
+                fontSize: 21,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
               children: [
-                const Expanded(
-                  child: Text(
-                    'Job Management',
-                    style: TextStyle(
-                      fontSize: 21,
-                      fontWeight: FontWeight.bold,
-                    ),
+                ElevatedButton.icon(
+                  onPressed: _collecting
+                      ? null
+                      : _runJobCollector,
+                  icon: _collecting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Icon(Icons.sync),
+                  label: Text(
+                    _collecting
+                        ? 'Collecting Jobs...'
+                        : 'Collect Jobs Automatically',
                   ),
                 ),
-                ElevatedButton.icon(
+
+                OutlinedButton.icon(
                   onPressed: () {
                     setState(() {
                       _showCreateForm = !_showCreateForm;
