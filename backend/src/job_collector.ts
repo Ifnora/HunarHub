@@ -55,6 +55,34 @@ function cleanText(value: unknown): string {
     .trim();
 }
 
+function getErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+
+  const details: string[] = [error.message];
+
+  const cause = (error as Error & {
+    cause?: {
+      message?: string;
+      code?: string;
+      errno?: string | number;
+      syscall?: string;
+      hostname?: string;
+    };
+  }).cause;
+
+  if (cause) {
+    if (cause.message) details.push(cause.message);
+    if (cause.code) details.push(`code=${cause.code}`);
+    if (cause.errno) details.push(`errno=${cause.errno}`);
+    if (cause.syscall) details.push(`syscall=${cause.syscall}`);
+    if (cause.hostname) details.push(`hostname=${cause.hostname}`);
+  }
+
+  return [...new Set(details)].join(" | ");
+}
+
 function getXmlValue(
   block: string,
   tag: string
@@ -90,7 +118,32 @@ function getXmlLink(block: string): string | null {
 function parseDate(value: string | null): Date | null {
   if (!value) return null;
 
-  const date = new Date(value);
+  const trimmed = value.trim();
+
+  // Handle common Pakistan government date formats.
+  const slashDate = trimmed.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/
+  );
+
+  if (slashDate) {
+    const month = Number(slashDate[1]);
+    const day = Number(slashDate[2]);
+    const year = Number(slashDate[3]);
+
+    const date = new Date(Date.UTC(year, month - 1, day));
+
+    if (
+      date.getUTCFullYear() !== year ||
+      date.getUTCMonth() !== month - 1 ||
+      date.getUTCDate() !== day
+    ) {
+      return null;
+    }
+
+    return date;
+  }
+
+  const date = new Date(trimmed);
 
   return Number.isNaN(date.getTime()) ? null : date;
 }
@@ -105,6 +158,166 @@ function isExpired(deadline: Date | null): boolean {
   closingDate.setHours(0, 0, 0, 0);
 
   return closingDate < today;
+}
+
+function validateJobUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+
+    return (
+      parsed.protocol === "https:" &&
+      !parsed.username &&
+      !parsed.password
+    );
+  } catch {
+    return false;
+  }
+}
+
+function validateFeedUrl(
+  feedUrl: string,
+  websiteUrl: string
+): boolean {
+  try {
+    const feed = new URL(feedUrl);
+    const website = new URL(websiteUrl);
+
+    return (
+      feed.protocol === "https:" &&
+      website.protocol === "https:" &&
+      feed.hostname === website.hostname &&
+      !feed.username &&
+      !feed.password
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Fetches a source page while safely handling redirects.
+ * Redirects must remain HTTPS and on the originally approved hostname.
+ */
+async function fetchSourcePage(
+  feedUrl: string,
+  websiteUrl: string
+): Promise<string> {
+  const approvedHost = new URL(websiteUrl).hostname;
+  let currentUrl = new URL(feedUrl);
+
+  const controller = new AbortController();
+
+  const timeout = setTimeout(() => {
+    controller.abort();
+  }, 15000);
+
+  try {
+    for (let attempt = 0; attempt <= 5; attempt++) {
+      if (
+        currentUrl.protocol !== "https:" ||
+        currentUrl.hostname !== approvedHost ||
+        currentUrl.username ||
+        currentUrl.password
+      ) {
+        throw new Error(
+          "Redirect rejected: destination is not the approved HTTPS host"
+        );
+      }
+
+      let response: Response;
+
+      try {
+        response = await fetch(currentUrl.toString(), {
+          method: "GET",
+          redirect: "manual",
+          signal: controller.signal,
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (compatible; HunarHubJobCollector/1.0)",
+            Accept:
+              "text/html, application/rss+xml, application/atom+xml, application/json, text/xml, */*",
+            "Accept-Language": "en-PK,en;q=0.9"
+          }
+        });
+      } catch (error) {
+        throw new Error(
+          `Network request failed for ${currentUrl.hostname}: ${getErrorMessage(error)}`
+        );
+      }
+
+      const isRedirect = [
+        301,
+        302,
+        303,
+        307,
+        308
+      ].includes(response.status);
+
+      if (isRedirect) {
+        const location = response.headers.get("location");
+
+        if (!location) {
+          throw new Error(
+            `Source returned HTTP ${response.status} without a redirect location`
+          );
+        }
+
+        if (attempt === 5) {
+          throw new Error("Source exceeded the maximum redirect limit");
+        }
+
+        let nextUrl: URL;
+
+        try {
+          nextUrl = new URL(location, currentUrl);
+        } catch {
+          throw new Error("Source returned an invalid redirect URL");
+        }
+
+        if (
+          nextUrl.protocol !== "https:" ||
+          nextUrl.hostname !== approvedHost ||
+          nextUrl.username ||
+          nextUrl.password
+        ) {
+          throw new Error(
+            "Source redirect rejected because it changed the approved hostname or HTTPS protocol"
+          );
+        }
+
+        currentUrl = nextUrl;
+        continue;
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          `Source returned HTTP ${response.status} ${response.statusText}`
+        );
+      }
+
+      const contentLength = Number(
+        response.headers.get("content-length") || 0
+      );
+
+      if (contentLength > 1_000_000) {
+        throw new Error("Source response exceeds the 1 MB limit");
+      }
+
+      const body = await response.text();
+
+      if (
+        new TextEncoder().encode(body).length > 1_000_000
+      ) {
+        throw new Error("Source response exceeds the 1 MB limit");
+      }
+
+      return body;
+    }
+
+    throw new Error("Unable to retrieve source page");
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function parseXmlFeed(
@@ -158,7 +371,10 @@ function getJsonField(
 
   const value = item[field];
 
-  if (typeof value === "string" || typeof value === "number") {
+  if (
+    typeof value === "string" ||
+    typeof value === "number"
+  ) {
     return String(value).trim() || null;
   }
 
@@ -288,7 +504,9 @@ function parseHtmlPage(
 
     if (!validateJobUrl(applyUrl)) return;
 
-    const getText = (selector?: string): string | null => {
+    const getText = (
+      selector?: string
+    ): string | null => {
       if (!selector) return null;
 
       const value = cleanText(
@@ -323,84 +541,6 @@ function parseHtmlPage(
   });
 
   return jobs;
-}
-
-function validateFeedUrl(
-  feedUrl: string,
-  websiteUrl: string
-): boolean {
-  try {
-    const feed = new URL(feedUrl);
-    const website = new URL(websiteUrl);
-
-    return (
-      feed.protocol === "https:" &&
-      website.protocol === "https:" &&
-      feed.hostname === website.hostname &&
-      !feed.username &&
-      !feed.password
-    );
-  } catch {
-    return false;
-  }
-}
-
-function validateJobUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-
-    return (
-      parsed.protocol === "https:" &&
-      !parsed.username &&
-      !parsed.password
-    );
-  } catch {
-    return false;
-  }
-}
-
-function logDetailedError(
-  sourceName: string,
-  error: unknown
-): void {
-  console.error(
-    `Job collection failed for source ${sourceName}:`,
-    error
-  );
-
-  if (error instanceof Error) {
-    console.error("Error name:", error.name);
-    console.error("Error message:", error.message);
-    console.error("Error stack:", error.stack);
-
-    const errorWithCause = error as Error & {
-      cause?: unknown;
-    };
-
-    if (errorWithCause.cause !== undefined) {
-      console.error(
-        "Underlying error cause:",
-        errorWithCause.cause
-      );
-
-      if (
-        typeof errorWithCause.cause === "object" &&
-        errorWithCause.cause !== null
-      ) {
-        const cause = errorWithCause.cause as {
-          code?: unknown;
-          message?: unknown;
-          name?: unknown;
-        };
-
-        console.error("Cause name:", cause.name);
-        console.error("Cause message:", cause.message);
-        console.error("Cause code:", cause.code);
-      }
-    }
-  } else {
-    console.error("Unknown error details:", String(error));
-  }
 }
 
 async function saveJob(
@@ -523,78 +663,23 @@ export async function collectJobs() {
         !feedUrl ||
         !validateFeedUrl(feedUrl, source.website_url)
       ) {
-        throw new Error("Invalid or unapproved source URL");
-      }
-
-      if (!["rss", "atom", "json", "html"].includes(format)) {
-        throw new Error(`Unsupported source format: ${format}`);
-      }
-
-      const controller = new AbortController();
-      let timedOut = false;
-
-      const timeout = setTimeout(() => {
-        timedOut = true;
-        controller.abort();
-      }, 15000);
-
-      let body: string;
-
-      try {
-        console.info(
-          `Fetching job source: ${source.name}`,
-          feedUrl
+        throw new Error(
+          "Invalid or unapproved source URL"
         );
-
-        const response = await fetch(feedUrl, {
-          method: "GET",
-          redirect: "error",
-          signal: controller.signal,
-          headers: {
-            Accept:
-              "text/html, application/rss+xml, application/atom+xml, application/json, text/xml",
-            "User-Agent": "HunarHub-Pakistan-JobCollector/1.0"
-          }
-        });
-
-        console.info(
-          `Job source HTTP response: ${source.name}`,
-          response.status
-        );
-
-        if (!response.ok) {
-          throw new Error(
-            `Source request failed: HTTP ${response.status}`
-          );
-        }
-
-        const contentLength = Number(
-          response.headers.get("content-length") || 0
-        );
-
-        if (contentLength > 1_000_000) {
-          throw new Error("Source exceeds 1 MB limit");
-        }
-
-        body = await response.text();
-      } catch (error) {
-        if (timedOut) {
-          throw new Error(
-            `Source request timed out after 15 seconds: ${feedUrl}`,
-            { cause: error }
-          );
-        }
-
-        throw error;
-      } finally {
-        clearTimeout(timeout);
       }
 
       if (
-        new TextEncoder().encode(body).length > 1_000_000
+        !["rss", "atom", "json", "html"].includes(format)
       ) {
-        throw new Error("Source exceeds 1 MB limit");
+        throw new Error(
+          `Unsupported source format: ${format}`
+        );
       }
+
+      const body = await fetchSourcePage(
+        feedUrl,
+        source.website_url
+      );
 
       let jobs: JobItem[];
 
@@ -604,7 +689,7 @@ export async function collectJobs() {
         try {
           parsed = JSON.parse(body);
         } catch {
-          throw new Error("Invalid JSON source");
+          throw new Error("Source returned invalid JSON");
         }
 
         jobs = parseJsonFeed(
@@ -629,28 +714,17 @@ export async function collectJobs() {
         );
       }
 
-      console.info(
-        `Jobs extracted from ${source.name}:`,
-        jobs.length
-      );
-
       summary.jobs_found += jobs.length;
 
       for (const job of jobs) {
-        if (isExpired(job.deadline)) {
-          continue;
-        }
+        if (!job.title || !job.external_id) continue;
 
-        if (!job.title || !job.external_id) {
+        if (isExpired(job.deadline)) {
           continue;
         }
 
         if (!validateJobUrl(job.official_apply_url)) {
           summary.errors++;
-          console.error(
-            `Invalid job URL skipped from ${source.name}:`,
-            job.official_apply_url
-          );
           continue;
         }
 
@@ -666,9 +740,17 @@ export async function collectJobs() {
           summary.duplicates++;
         }
       }
+
+      console.log(
+        `Job source completed: ${source.name}; parsed ${jobs.length} jobs`
+      );
     } catch (error) {
       summary.errors++;
-      logDetailedError(source.name, error);
+
+      console.error(
+        `Job collection failed for source ${source.name}:`,
+        getErrorMessage(error)
+      );
     }
   }
 
