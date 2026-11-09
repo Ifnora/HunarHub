@@ -33,7 +33,7 @@ type HtmlSelectors = {
 
 type SourceSettings = {
   feed_url?: string;
-  format?: string;
+  date_format?: "DMY" | "MDY" | "YMD";
   category_id?: number;
   country?: string;
   field_map?: Record<string, string>;
