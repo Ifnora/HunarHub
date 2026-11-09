@@ -95,6 +95,18 @@ function parseDate(value: string | null): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function isExpired(deadline: Date | null): boolean {
+  if (!deadline) return false;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const closingDate = new Date(deadline);
+  closingDate.setHours(0, 0, 0, 0);
+
+  return closingDate < today;
+}
+
 function parseXmlFeed(
   xml: string,
   sourceName: string,
@@ -555,6 +567,9 @@ export async function collectJobs() {
       summary.jobs_found += jobs.length;
 
       for (const job of jobs) {
+            if (isExpired(job.deadline)) {
+          continue;
+            } 
         if (!job.title || !job.external_id) continue;
 
         if (!validateJobUrl(job.official_apply_url)) {
