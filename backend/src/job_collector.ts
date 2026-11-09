@@ -359,6 +359,50 @@ function validateJobUrl(url: string): boolean {
   }
 }
 
+function logDetailedError(
+  sourceName: string,
+  error: unknown
+): void {
+  console.error(
+    `Job collection failed for source ${sourceName}:`,
+    error
+  );
+
+  if (error instanceof Error) {
+    console.error("Error name:", error.name);
+    console.error("Error message:", error.message);
+    console.error("Error stack:", error.stack);
+
+    const errorWithCause = error as Error & {
+      cause?: unknown;
+    };
+
+    if (errorWithCause.cause !== undefined) {
+      console.error(
+        "Underlying error cause:",
+        errorWithCause.cause
+      );
+
+      if (
+        typeof errorWithCause.cause === "object" &&
+        errorWithCause.cause !== null
+      ) {
+        const cause = errorWithCause.cause as {
+          code?: unknown;
+          message?: unknown;
+          name?: unknown;
+        };
+
+        console.error("Cause name:", cause.name);
+        console.error("Cause message:", cause.message);
+        console.error("Cause code:", cause.code);
+      }
+    }
+  } else {
+    console.error("Unknown error details:", String(error));
+  }
+}
+
 async function saveJob(
   sourceId: number,
   categoryId: number | null,
@@ -483,28 +527,40 @@ export async function collectJobs() {
       }
 
       if (!["rss", "atom", "json", "html"].includes(format)) {
-        throw new Error("Unsupported source format");
+        throw new Error(`Unsupported source format: ${format}`);
       }
 
       const controller = new AbortController();
+      let timedOut = false;
 
-      const timeout = setTimeout(
-        () => controller.abort(),
-        15000
-      );
+      const timeout = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, 15000);
 
       let body: string;
 
       try {
+        console.info(
+          `Fetching job source: ${source.name}`,
+          feedUrl
+        );
+
         const response = await fetch(feedUrl, {
           method: "GET",
           redirect: "error",
           signal: controller.signal,
           headers: {
             Accept:
-              "text/html, application/rss+xml, application/atom+xml, application/json, text/xml"
+              "text/html, application/rss+xml, application/atom+xml, application/json, text/xml",
+            "User-Agent": "HunarHub-Pakistan-JobCollector/1.0"
           }
         });
+
+        console.info(
+          `Job source HTTP response: ${source.name}`,
+          response.status
+        );
 
         if (!response.ok) {
           throw new Error(
@@ -521,6 +577,15 @@ export async function collectJobs() {
         }
 
         body = await response.text();
+      } catch (error) {
+        if (timedOut) {
+          throw new Error(
+            `Source request timed out after 15 seconds: ${feedUrl}`,
+            { cause: error }
+          );
+        }
+
+        throw error;
       } finally {
         clearTimeout(timeout);
       }
@@ -564,16 +629,28 @@ export async function collectJobs() {
         );
       }
 
+      console.info(
+        `Jobs extracted from ${source.name}:`,
+        jobs.length
+      );
+
       summary.jobs_found += jobs.length;
 
       for (const job of jobs) {
-            if (isExpired(job.deadline)) {
+        if (isExpired(job.deadline)) {
           continue;
-            } 
-        if (!job.title || !job.external_id) continue;
+        }
+
+        if (!job.title || !job.external_id) {
+          continue;
+        }
 
         if (!validateJobUrl(job.official_apply_url)) {
           summary.errors++;
+          console.error(
+            `Invalid job URL skipped from ${source.name}:`,
+            job.official_apply_url
+          );
           continue;
         }
 
@@ -591,11 +668,7 @@ export async function collectJobs() {
       }
     } catch (error) {
       summary.errors++;
-
-      console.error(
-        `Job collection failed for source ${source.name}:`,
-        error instanceof Error ? error.message : error
-      );
+      logDetailedError(source.name, error);
     }
   }
 
