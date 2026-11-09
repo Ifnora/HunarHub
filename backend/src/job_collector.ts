@@ -33,6 +33,7 @@ type HtmlSelectors = {
 
 type SourceSettings = {
   feed_url?: string;
+  format?: string;
   date_format?: "DMY" | "MDY" | "YMD";
   category_id?: number;
   country?: string;
@@ -87,7 +88,10 @@ function getXmlValue(
   block: string,
   tag: string
 ): string | null {
-  const escapedTag = tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const escapedTag = tag.replace(
+    /[.*+?^${}()|[\]\\]/g,
+    "\\$&"
+  );
 
   const match = block.match(
     new RegExp(
@@ -115,22 +119,53 @@ function getXmlLink(block: string): string | null {
   return null;
 }
 
-function parseDate(value: string | null): Date | null {
+/**
+ * Parses common date formats.
+ *
+ * DMY = 09/11/2026
+ * MDY = 11/09/2026
+ * YMD = 2026/11/09
+ *
+ * Default slash-date format is MDY.
+ */
+function parseDate(
+  value: string | null,
+  dateFormat: "DMY" | "MDY" | "YMD" = "MDY"
+): Date | null {
   if (!value) return null;
 
   const trimmed = value.trim();
 
-  // Handle common Pakistan government date formats.
+  if (!trimmed) return null;
+
   const slashDate = trimmed.match(
-    /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/
+    /^(\d{1,4})[/-](\d{1,2})[/-](\d{1,4})$/
   );
 
   if (slashDate) {
-    const month = Number(slashDate[1]);
-    const day = Number(slashDate[2]);
-    const year = Number(slashDate[3]);
+    let year: number;
+    let month: number;
+    let day: number;
 
-    const date = new Date(Date.UTC(year, month - 1, day));
+    if (dateFormat === "YMD") {
+      year = Number(slashDate[1]);
+      month = Number(slashDate[2]);
+      day = Number(slashDate[3]);
+    } else if (dateFormat === "DMY") {
+      day = Number(slashDate[1]);
+      month = Number(slashDate[2]);
+      year = Number(slashDate[3]);
+    } else {
+      month = Number(slashDate[1]);
+      day = Number(slashDate[2]);
+      year = Number(slashDate[3]);
+    }
+
+    if (year < 1000 || year > 9999) return null;
+
+    const date = new Date(
+      Date.UTC(year, month - 1, day)
+    );
 
     if (
       date.getUTCFullYear() !== year ||
@@ -143,21 +178,39 @@ function parseDate(value: string | null): Date | null {
     return date;
   }
 
-  const date = new Date(trimmed);
+  // Handles dates such as 09-Nov-2026 and ISO dates.
+  const parsed = new Date(trimmed);
 
-  return Number.isNaN(date.getTime()) ? null : date;
+  return Number.isNaN(parsed.getTime())
+    ? null
+    : parsed;
 }
 
+/**
+ * Compare dates using Pakistan local calendar date.
+ * Jobs closing today remain eligible for collection.
+ */
 function isExpired(deadline: Date | null): boolean {
   if (!deadline) return false;
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const options: Intl.DateTimeFormatOptions = {
+    timeZone: "Asia/Karachi",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  };
 
-  const closingDate = new Date(deadline);
-  closingDate.setHours(0, 0, 0, 0);
+  const todayKey = new Intl.DateTimeFormat(
+    "en-CA",
+    options
+  ).format(new Date());
 
-  return closingDate < today;
+  const deadlineKey = new Intl.DateTimeFormat(
+    "en-CA",
+    options
+  ).format(deadline);
+
+  return deadlineKey < todayKey;
 }
 
 function validateJobUrl(url: string): boolean {
@@ -195,8 +248,8 @@ function validateFeedUrl(
 }
 
 /**
- * Fetches a source page while safely handling redirects.
- * Redirects must remain HTTPS and on the originally approved hostname.
+ * Fetches a source page.
+ * Redirects must remain HTTPS and on the approved hostname.
  */
 async function fetchSourcePage(
   feedUrl: string,
@@ -263,7 +316,9 @@ async function fetchSourcePage(
         }
 
         if (attempt === 5) {
-          throw new Error("Source exceeded the maximum redirect limit");
+          throw new Error(
+            "Source exceeded the maximum redirect limit"
+          );
         }
 
         let nextUrl: URL;
@@ -271,7 +326,9 @@ async function fetchSourcePage(
         try {
           nextUrl = new URL(location, currentUrl);
         } catch {
-          throw new Error("Source returned an invalid redirect URL");
+          throw new Error(
+            "Source returned an invalid redirect URL"
+          );
         }
 
         if (
@@ -300,7 +357,9 @@ async function fetchSourcePage(
       );
 
       if (contentLength > 1_000_000) {
-        throw new Error("Source response exceeds the 1 MB limit");
+        throw new Error(
+          "Source response exceeds the 1 MB limit"
+        );
       }
 
       const body = await response.text();
@@ -308,7 +367,9 @@ async function fetchSourcePage(
       if (
         new TextEncoder().encode(body).length > 1_000_000
       ) {
-        throw new Error("Source response exceeds the 1 MB limit");
+        throw new Error(
+          "Source response exceeds the 1 MB limit"
+        );
       }
 
       return body;
@@ -323,7 +384,8 @@ async function fetchSourcePage(
 function parseXmlFeed(
   xml: string,
   sourceName: string,
-  country: string
+  country: string,
+  dateFormat: "DMY" | "MDY" | "YMD"
 ): JobItem[] {
   const blocks = xml.match(
     /<(item|entry)\b[^>]*>[\s\S]*?<\/\1>/gi
@@ -342,6 +404,11 @@ function parseXmlFeed(
       getXmlValue(block, "id") ||
       link;
 
+    const deadlineText =
+      getXmlValue(block, "deadline") ||
+      getXmlValue(block, "closingDate") ||
+      getXmlValue(block, "pubDate");
+
     jobs.push({
       title,
       employer: sourceName,
@@ -355,7 +422,7 @@ function parseXmlFeed(
       experience: null,
       salary_information: null,
       official_apply_url: link,
-      deadline: null,
+      deadline: parseDate(deadlineText, dateFormat),
       external_id: externalId
     });
   }
@@ -385,7 +452,8 @@ function parseJsonFeed(
   json: unknown,
   sourceName: string,
   country: string,
-  fieldMap: Record<string, string> = {}
+  fieldMap: Record<string, string> = {},
+  dateFormat: "DMY" | "MDY" | "YMD" = "MDY"
 ): JobItem[] {
   if (!json || typeof json !== "object") return [];
 
@@ -400,7 +468,9 @@ function parseJsonFeed(
   const jobs: JobItem[] = [];
 
   for (const rawItem of items) {
-    if (!rawItem || typeof rawItem !== "object") continue;
+    if (!rawItem || typeof rawItem !== "object") {
+      continue;
+    }
 
     const item = rawItem as Record<string, unknown>;
 
@@ -417,8 +487,10 @@ function parseJsonFeed(
     if (!title || !link) continue;
 
     const externalId =
-      getJsonField(item, fieldMap.external_id || "id") ||
-      link;
+      getJsonField(
+        item,
+        fieldMap.external_id || "id"
+      ) || link;
 
     const deadlineText = getJsonField(
       item,
@@ -428,15 +500,19 @@ function parseJsonFeed(
     jobs.push({
       title,
       employer:
-        getJsonField(item, fieldMap.employer || "employer") ||
-        sourceName,
+        getJsonField(
+          item,
+          fieldMap.employer || "employer"
+        ) || sourceName,
       location: getJsonField(
         item,
         fieldMap.location || "location"
       ),
       country:
-        getJsonField(item, fieldMap.country || "country") ||
-        country,
+        getJsonField(
+          item,
+          fieldMap.country || "country"
+        ) || country,
       description: getJsonField(
         item,
         fieldMap.description || "description"
@@ -454,7 +530,7 @@ function parseJsonFeed(
         fieldMap.salary_information || "salary"
       ),
       official_apply_url: link,
-      deadline: parseDate(deadlineText),
+      deadline: parseDate(deadlineText, dateFormat),
       external_id: externalId
     });
   }
@@ -467,7 +543,8 @@ function parseHtmlPage(
   sourceName: string,
   country: string,
   baseUrl: string,
-  selectors: HtmlSelectors
+  selectors: HtmlSelectors,
+  dateFormat: "DMY" | "MDY" | "YMD"
 ): JobItem[] {
   if (
     !selectors.item ||
@@ -489,7 +566,10 @@ function parseHtmlPage(
       item.find(selectors.title!).first().text()
     );
 
-    const linkElement = item.find(selectors.link!).first();
+    const linkElement = item
+      .find(selectors.link!)
+      .first();
+
     const rawLink = linkElement.attr("href");
 
     if (!title || !rawLink) return;
@@ -516,27 +596,44 @@ function parseHtmlPage(
       return value || null;
     };
 
-    const externalId =
-      getText(selectors.external_id) ||
-      (
-        selectors.external_id_attribute
-          ? item.attr(selectors.external_id_attribute) || null
-          : null
-      ) ||
-      applyUrl;
+    let externalId: string | null = null;
+
+    if (selectors.external_id) {
+      externalId = getText(selectors.external_id);
+    }
+
+    if (
+      !externalId &&
+      selectors.external_id_attribute
+    ) {
+      externalId =
+        linkElement.attr(
+          selectors.external_id_attribute
+        ) ||
+        item.attr(
+          selectors.external_id_attribute
+        ) ||
+        null;
+    }
 
     jobs.push({
       title,
-      employer: getText(selectors.employer) || sourceName,
+      employer:
+        getText(selectors.employer) || sourceName,
       location: getText(selectors.location),
       country,
       description: getText(selectors.description),
       qualification: getText(selectors.qualification),
       experience: getText(selectors.experience),
-      salary_information: getText(selectors.salary_information),
+      salary_information: getText(
+        selectors.salary_information
+      ),
       official_apply_url: applyUrl,
-      deadline: parseDate(getText(selectors.deadline)),
-      external_id: externalId
+      deadline: parseDate(
+        getText(selectors.deadline),
+        dateFormat
+      ),
+      external_id: externalId || applyUrl
     });
   });
 
@@ -642,6 +739,7 @@ export async function collectJobs() {
     jobs_found: 0,
     jobs_added: 0,
     duplicates: 0,
+    expired: 0,
     errors: 0
   };
 
@@ -656,12 +754,20 @@ export async function collectJobs() {
       const feedUrl = settings.feed_url;
 
       const format = (
-        settings.format || source.source_type || ""
+        settings.format ||
+        source.source_type ||
+        ""
       ).toLowerCase();
+
+      const dateFormat =
+        settings.date_format || "MDY";
 
       if (
         !feedUrl ||
-        !validateFeedUrl(feedUrl, source.website_url)
+        !validateFeedUrl(
+          feedUrl,
+          source.website_url
+        )
       ) {
         throw new Error(
           "Invalid or unapproved source URL"
@@ -669,7 +775,9 @@ export async function collectJobs() {
       }
 
       if (
-        !["rss", "atom", "json", "html"].includes(format)
+        !["rss", "atom", "json", "html"].includes(
+          format
+        )
       ) {
         throw new Error(
           `Unsupported source format: ${format}`
@@ -689,14 +797,17 @@ export async function collectJobs() {
         try {
           parsed = JSON.parse(body);
         } catch {
-          throw new Error("Source returned invalid JSON");
+          throw new Error(
+            "Source returned invalid JSON"
+          );
         }
 
         jobs = parseJsonFeed(
           parsed,
           source.name,
           settings.country || "Pakistan",
-          settings.field_map
+          settings.field_map,
+          dateFormat
         );
       } else if (format === "html") {
         jobs = parseHtmlPage(
@@ -704,26 +815,35 @@ export async function collectJobs() {
           source.name,
           settings.country || "Pakistan",
           feedUrl,
-          settings.selectors || {}
+          settings.selectors || {},
+          dateFormat
         );
       } else {
         jobs = parseXmlFeed(
           body,
           source.name,
-          settings.country || "Pakistan"
+          settings.country || "Pakistan",
+          dateFormat
         );
       }
 
       summary.jobs_found += jobs.length;
 
       for (const job of jobs) {
-        if (!job.title || !job.external_id) continue;
-
-        if (isExpired(job.deadline)) {
+        if (!job.title || !job.external_id) {
           continue;
         }
 
-        if (!validateJobUrl(job.official_apply_url)) {
+        if (isExpired(job.deadline)) {
+          summary.expired++;
+          continue;
+        }
+
+        if (
+          !validateJobUrl(
+            job.official_apply_url
+          )
+        ) {
           summary.errors++;
           continue;
         }
