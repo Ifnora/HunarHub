@@ -546,11 +546,7 @@ function parseHtmlPage(
   selectors: HtmlSelectors,
   dateFormat: "DMY" | "MDY" | "YMD"
 ): JobItem[] {
-  if (
-    !selectors.item ||
-    !selectors.title ||
-    !selectors.link
-  ) {
+  if (!selectors.item || !selectors.title || !selectors.link) {
     throw new Error(
       "HTML source requires item, title and link selectors"
     );
@@ -559,39 +555,63 @@ function parseHtmlPage(
   const $ = load(html);
   const jobs: JobItem[] = [];
 
+  let rowsFound = 0;
+  let titlesFound = 0;
+  let linksFound = 0;
+  let invalidUrls = 0;
+  let rowsSkipped = 0;
+
+  const getElement = (item: any, selector: string): any => {
+    if (item.is(selector)) return item;
+    return item.find(selector).first();
+  };
+
   $(selectors.item).each((_index, element) => {
+    rowsFound++;
+
     const item = $(element);
 
-    const title = cleanText(
-      item.find(selectors.title!).first().text()
-    );
+    const titleElement = getElement(item, selectors.title!);
+    const title = cleanText(titleElement.text());
 
-    const linkElement = item
-      .find(selectors.link!)
-      .first();
+    if (!title) {
+      rowsSkipped++;
+      return;
+    }
 
+    titlesFound++;
+
+    const linkElement = getElement(item, selectors.link!);
     const rawLink = linkElement.attr("href");
 
-    if (!title || !rawLink) return;
+    if (!rawLink) {
+      rowsSkipped++;
+      return;
+    }
+
+    linksFound++;
 
     let applyUrl: string;
 
     try {
       applyUrl = new URL(rawLink, baseUrl).toString();
     } catch {
+      invalidUrls++;
+      rowsSkipped++;
       return;
     }
 
-    if (!validateJobUrl(applyUrl)) return;
+    if (!validateJobUrl(applyUrl)) {
+      invalidUrls++;
+      rowsSkipped++;
+      return;
+    }
 
-    const getText = (
-      selector?: string
-    ): string | null => {
+    const getText = (selector?: string): string | null => {
       if (!selector) return null;
 
-      const value = cleanText(
-        item.find(selector).first().text()
-      );
+      const field = getElement(item, selector);
+      const value = cleanText(field.text());
 
       return value || null;
     };
@@ -602,24 +622,16 @@ function parseHtmlPage(
       externalId = getText(selectors.external_id);
     }
 
-    if (
-      !externalId &&
-      selectors.external_id_attribute
-    ) {
+    if (!externalId && selectors.external_id_attribute) {
       externalId =
-        linkElement.attr(
-          selectors.external_id_attribute
-        ) ||
-        item.attr(
-          selectors.external_id_attribute
-        ) ||
+        linkElement.attr(selectors.external_id_attribute) ||
+        item.attr(selectors.external_id_attribute) ||
         null;
     }
 
     jobs.push({
       title,
-      employer:
-        getText(selectors.employer) || sourceName,
+      employer: getText(selectors.employer) || sourceName,
       location: getText(selectors.location),
       country,
       description: getText(selectors.description),
@@ -637,8 +649,18 @@ function parseHtmlPage(
     });
   });
 
+  console.log("HTML parser diagnostics:", {
+    source: sourceName,
+    rowsFound,
+    titlesFound,
+    linksFound,
+    invalidUrls,
+    rowsSkipped,
+    jobsParsed: jobs.length
+  });
+
   return jobs;
-}
+                              }
 
 async function saveJob(
   sourceId: number,
