@@ -251,6 +251,8 @@ function validateFeedUrl(
  * Fetches a source page.
  * Redirects must remain HTTPS and on the approved hostname.
  */
+
+
 async function fetchSourcePage(
   feedUrl: string,
   websiteUrl: string
@@ -286,9 +288,9 @@ async function fetchSourcePage(
           signal: controller.signal,
           headers: {
             "User-Agent":
-              "Mozilla/5.0 (compatible; HunarHubJobCollector/1.0)",
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
             Accept:
-              "text/html, application/rss+xml, application/atom+xml, application/json, text/xml, */*",
+              "text/html,application/xhtml+xml,application/rss+xml,application/atom+xml,application/json,text/xml,*/*",
             "Accept-Language": "en-PK,en;q=0.9"
           }
         });
@@ -352,6 +354,9 @@ async function fetchSourcePage(
         );
       }
 
+      const contentType =
+        response.headers.get("content-type") || "unknown";
+
       const contentLength = Number(
         response.headers.get("content-length") || 0
       );
@@ -364,13 +369,33 @@ async function fetchSourcePage(
 
       const body = await response.text();
 
-      if (
-        new TextEncoder().encode(body).length > 1_000_000
-      ) {
+      const bodySize =
+        new TextEncoder().encode(body).length;
+
+      if (bodySize > 1_000_000) {
         throw new Error(
           "Source response exceeds the 1 MB limit"
         );
       }
+
+      const normalizedBody = body.toLowerCase();
+
+      console.log("JOB SOURCE FETCH DIAGNOSTICS:", {
+        host: currentUrl.hostname,
+        status: response.status,
+        contentType,
+        bodySize,
+        containsHtml: normalizedBody.includes("<html"),
+        containsTable: normalizedBody.includes("<table"),
+        containsKnownVacancy:
+          normalizedBody.includes("regional audit head"),
+        containsCloudflare:
+          normalizedBody.includes("cloudflare"),
+        containsCaptcha:
+          normalizedBody.includes("captcha"),
+        containsAccessDenied:
+          normalizedBody.includes("access denied")
+      });
 
       return body;
     }
@@ -381,6 +406,8 @@ async function fetchSourcePage(
   }
 }
 
+      
+      
 function parseXmlFeed(
   xml: string,
   sourceName: string,
