@@ -1,3 +1,4 @@
+
 import {
   Router,
   Request,
@@ -12,27 +13,10 @@ const router = Router();
 
 let collectionRunning = false;
 
-// ADMIN ACCESS CONTROL
-function requireAdmin(
-  req: Request,
-  res: Response,
-  next: NextFunction
+// SHARED COLLECTION HANDLER
+async function runCollection(
+  res: Response
 ) {
-  if (!req.user || req.user.role !== "admin") {
-    return res.status(403).json({
-      success: false,
-      message: "Admin access required"
-    });
-  }
-
-  next();
-}
-
-router.use(authenticateToken);
-router.use(requireAdmin);
-
-// RUN AUTOMATIC JOB COLLECTION
-router.post("/run", async (_req: Request, res: Response) => {
   if (collectionRunning) {
     return res.status(409).json({
       success: false,
@@ -56,6 +40,58 @@ router.post("/run", async (_req: Request, res: Response) => {
   } finally {
     collectionRunning = false;
   }
-});
+}
+
+// SECURE AUTOMATIC CRON ENDPOINT
+// Must be registered BEFORE user authentication middleware.
+router.get(
+  "/cron",
+  async (req: Request, res: Response) => {
+    const cronSecret = process.env.CRON_SECRET;
+
+    if (
+      !cronSecret ||
+      req.get("authorization") !== `Bearer ${cronSecret}`
+    ) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized"
+      });
+    }
+
+    console.log("Scheduled HunarHub job collection started");
+
+    return runCollection(res);
+  }
+);
+
+// ADMIN ACCESS CONTROL
+function requireAdmin(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  if (!req.user || req.user.role !== "admin") {
+    return res.status(403).json({
+      success: false,
+      message: "Admin access required"
+    });
+  }
+
+  next();
+}
+
+router.use(authenticateToken);
+router.use(requireAdmin);
+
+// EXISTING ADMIN COLLECTION ENDPOINT
+router.post(
+  "/run",
+  async (_req: Request, res: Response) => {
+    console.log("Admin HunarHub job collection started");
+
+    return runCollection(res);
+  }
+);
 
 export default router;
